@@ -1,4 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+ <meta charset="UTF-8" />
+ <meta
+   name="viewport"
+   content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+ />
+ <title>Snake — Mobile Web + Firebase (Home + Name + D-pad)</title>
+ <style>
+   :root{
+     --bg:#163f5b; --board:#327aa8; --snake:#00ff00; --food:#d53250;
+     --poison:#a020f0; --gold:#ffd700; --ob:#a9a9a9; --text:#ffffff; --accent:#0d2d40;
+     --safe-bottom: env(safe-area-inset-bottom, 0px);
+   }
+   html,body{
+     margin:0; padding:0; height:100dvh; overflow:hidden;
+     background:var(--bg); color:var(--text);
+     font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial;
+     touch-action:none; -webkit-user-select:none; user-select:none;
+   }
+   .wrap{
+     height:100dvh;
+     display:grid;
+     grid-template-rows:auto 1fr auto; /* header, game, controls */
+     justify-items:center; gap:6px;
+   }
+   header{
+     width:100%; max-width:900px; padding:6px 10px; box-sizing:border-box;
+     background:var(--accent); border-bottom:1px solid rgba(255,255,255,0.12);
+     border-radius:0 0 12px 12px; display:flex; align-items:center; justify-content:space-between;
+   }
+   #hud{ display:flex; gap:12px; font-weight:700; align-items:center;}
+   #playerTag{ opacity:.85; font-weight:600; }
+   #changeName{ color:#9ae6ff; text-decoration:underline; cursor:pointer; font-size:13px; margin-left:6px;}
+   #restartBtn{
+     appearance:none; border:0; cursor:pointer; padding:8px 12px; border-radius:10px;
+     background:#22c55e; color:#052e14; font-weight:800; box-shadow:0 2px 0 #138a3d;
+   }
+   main{ width:100%; display:grid; place-items:center; }
+   #board{ image-rendering:pixelated; border-radius:8px; box-shadow:0 8px 24px rgba(0,0,0,0.35); }
 
+   /* D-pad area */
+   .pad{
+     width:100%; max-width:900px;
+     padding: 6px 10px calc(6px + var(--safe-bottom));
+     box-sizing:border-box; display:grid; place-items:center;
+   }
+   .dpad{
+     width: clamp(180px, 46vw, 280px);
+     aspect-ratio:1/1;
+     display:grid;
+     grid-template-columns: 1fr 1fr 1fr;
+     grid-template-rows: 1fr 1fr 1fr;
+     gap: 10px;
+   }
+   .btn{
+     border:0; border-radius:14px; background:#0ea5e9; color:#fff; font-weight:900;
+     font-size: clamp(18px, 5vw, 26px); display:grid; place-items:center;
+     box-shadow:0 6px 0 #0b6da0; touch-action:manipulation; cursor:pointer;
+   }
+   .btn:active{ transform: translateY(2px); }
+   #btnUp   { grid-column:2; grid-row:1; }
+   #btnLeft { grid-column:1; grid-row:2; }
+   #btnRight{ grid-column:3; grid-row:2; }
+   #btnDown { grid-column:2; grid-row:3; }
+
+   /* Overlay (used for Home, Name prompt, and Game Over) */
+   #overlay{
+     position:fixed; inset:0; z-index:10; display:none; align-items:center; justify-content:center;
+     background:rgba(0,0,0,0.6); padding:16px;
+   }
+   .card{
+     background:#0c2230; border:1px solid rgba(255,255,255,0.1); border-radius:16px; padding:16px;
+     width:min(520px, calc(100% - 24px)); text-align:center; box-shadow:0 10px 30px rgba(0,0,0,0.4);
+   }
+   .card h1{ margin:0 0 10px; font-size:24px; }
+   .row{ display:flex; gap:10px; justify-content:center; margin-top:10px; flex-wrap:wrap;}
+   .ghost{ opacity:0.8; font-size:14px; }
+
+   .text{
+     width:100%; box-sizing:border-box; padding:10px 12px; border-radius:10px; border:1px solid #23465f;
+     background:#0a1a24; color:#fff; outline:none; font-size:16px;
+   }
+   .cta{
+     appearance:none; border:0; cursor:pointer; padding:10px 14px; border-radius:10px;
+     background:#22c55e; color:#052e14; font-weight:800; box-shadow:0 2px 0 #138a3d;
+   }
+   .ghostBtn{
+     appearance:none; border:1px solid #2b506a; cursor:pointer; padding:10px 14px; border-radius:10px;
+     background:#0d2d40; color:#c8f1ff; font-weight:700;
+   }
+   a.ghostBtn{ text-decoration:none; display:inline-block; }
+ </style>
+</head>
+<body>
+ <div class="wrap">
+   <header>
+     <div id="hud">
+       <span id="score">Score: 0</span>
+       <span id="time">Time: 60</span>
+       <span id="playerTag"></span><span id="changeName" hidden>change</span>
+     </div>
+     <button id="restartBtn" aria-label="Restart">Restart</button>
+   </header>
+
+   <main>
+     <canvas id="board" width="300" height="400"></canvas>
+   </main>
+
+   <!-- D-pad -->
+   <div class="pad" aria-label="On-screen controller">
+     <div class="dpad">
+       <button id="btnUp" class="btn"    aria-label="Up">▲</button>
+       <button id="btnLeft" class="btn"  aria-label="Left">◀</button>
+       <button id="btnRight" class="btn" aria-label="Right">▶</button>
+       <button id="btnDown" class="btn"  aria-label="Down">▼</button>
+     </div>
+   </div>
+ </div>
+<!-- Overlay -->
+ <div id="overlay">
    <div class="card" id="overlayCard"><!-- content set by JS --></div>
  </div>
 
@@ -274,10 +395,5 @@ const firebaseConfig = {
  </script>
 </body>
 </html>
-
-   // Init
-   resizeCanvas();   // size to viewport first
-   reset();          // draw idle state
- </script>
 </body>
 </html>
