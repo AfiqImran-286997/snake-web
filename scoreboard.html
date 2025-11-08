@@ -24,20 +24,14 @@
  <div class="wrap">
    <header>
      <h1 style="margin:0">Snake — Scoreboard</h1>
-     <div>
-       <a href="index.html" class="btn">Home</a>
-     </div>
+     <div><a href="index.html" class="btn">Home</a></div>
    </header>
 
    <p class="muted">Showing top scores for <b>Snake</b>. Your name is saved in your browser and attached to your scores.</p>
 
    <table id="table">
-     <thead>
-       <tr><th>#</th><th>Name</th><th>Score</th><th>Date</th></tr>
-     </thead>
-     <tbody id="rows">
-       <tr><td colspan="4" class="muted">Loading…</td></tr>
-     </tbody>
+     <thead><tr><th>#</th><th>Name</th><th>Score</th><th>Date</th></tr></thead>
+     <tbody id="rows"><tr><td colspan="4" class="muted">Loading…</td></tr></tbody>
    </table>
  </div>
 
@@ -46,21 +40,20 @@
    import { getFirestore, collection, query, where, orderBy, limit, getDocs } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-firestore.js";
 
    /* SAME CONFIG AS index.html */
-const firebaseConfig = {
-  apiKey: "AIzaSyCB1IQNSy8pGFXgv9S1P4f0sTLyPxiUv9k",
-  authDomain: "snake-web-b6745.firebaseapp.com",
-  projectId: "snake-web-b6745",
-  storageBucket: "snake-web-b6745.firebasestorage.app",
-  messagingSenderId: "242732126109",
-  appId: "1:242732126109:web:1d44c9bf8371f238792974"
-};
+   const firebaseConfig = {
+     apiKey: "AIzaSyCB1IQNSy8pGFXgv9S1P4f0sTLyPxiUv9k",
+     authDomain: "snake-web-b6745.firebaseapp.com",
+     projectId: "snake-web-b6745",
+     storageBucket: "snake-web-b6745.firebasestorage.app",
+     messagingSenderId: "242732126109",
+     appId: "1:242732126109:web:1d44c9bf8371f238792974"
+   };
    const app = initializeApp(firebaseConfig);
    const db  = getFirestore(app);
 
    async function loadScores(){
      const rows = document.getElementById('rows');
      rows.innerHTML = `<tr><td colspan="4" class="muted">Loading…</td></tr>`;
-
      try{
        const q = query(
          collection(db,"scores"),
@@ -78,9 +71,7 @@ const firebaseConfig = {
          const score = d.score ?? 0;
          const dt = d.created_at && d.created_at.toDate ? d.created_at.toDate() : null;
          const dateStr = dt ? dt.toLocaleString() : "-";
-         html += `<tr>
-           <td>${++i}</td><td>${escapeHtml(name)}</td><td>${score}</td><td>${dateStr}</td>
-         </tr>`;
+         html += `<tr><td>${++i}</td><td>${escapeHtml(name)}</td><td>${score}</td><td>${dateStr}</td></tr>`;
        });
        rows.innerHTML = html;
      }catch(e){
@@ -89,7 +80,6 @@ const firebaseConfig = {
      }
    }
 
-   /* simple HTML escape */
    function escapeHtml(s){ return s.replace(/[&<>"']/g, m=>({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[m])) }
 
    loadScores();
