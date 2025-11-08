@@ -12,167 +12,104 @@
      --bg: #163f5b;
      --board: #327aa8;
      --snake: #00ff00;
-     --food: #d53250;     /* normal */
-     --poison: #a020f0;   /* poison */
-     --gold: #ffd700;     /* golden */
-     --ob: #a9a9a9;       /* obstacles */
+     --food: #d53250;
+     --poison: #a020f0;
+     --gold: #ffd700;
+     --ob: #a9a9a9;
      --text: #ffffff;
      --accent: #0d2d40;
+     --safe-bottom: env(safe-area-inset-bottom, 0px);
    }
    html, body {
-     margin: 0;
-     padding: 0;
+     margin: 0; padding: 0;
+     height: 100dvh;
+     overflow: hidden;              /* <- no scrolling */
      background: var(--bg);
      color: var(--text);
-     font-family: system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji";
-     height: 100%;
-     overscroll-behavior: none;
-     touch-action: none; /* prevent browser gestures while playing */
+     font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial;
+     touch-action: none;            /* prevent page gestures while playing */
+     -webkit-user-select: none; user-select: none;
    }
    .wrap {
-     display: flex;
-     flex-direction: column;
-     min-height: 100dvh;
-     align-items: center;
-     gap: 8px;
+     height: 100dvh;
+     display: grid;
+     grid-template-rows: auto 1fr auto; /* header, game area, controls */
+     justify-items: center;
+     gap: 6px;
    }
    header {
      width: 100%;
-     max-width: 720px;
-     padding: 8px 12px;
+     max-width: 900px;
+     padding: 6px 10px;
      box-sizing: border-box;
-     display: flex;
-     justify-content: space-between;
-     align-items: center;
      background: var(--accent);
-     border-bottom: 1px solid rgba(255,255,255,0.1);
+     border-bottom: 1px solid rgba(255,255,255,0.12);
      border-radius: 0 0 12px 12px;
-     margin-bottom: 6px;
-   }
-   #hud {
      display: flex;
-     gap: 12px;
      align-items: center;
-     font-weight: 600;
+     justify-content: space-between;
    }
+   #hud { display: flex; gap: 10px; font-weight: 700; }
    #restartBtn {
-     appearance: none;
-     border: none;
-     padding: 10px 14px;
-     border-radius: 10px;
-     font-weight: 700;
-     background: #22c55e;
-     color: #052e14;
+     appearance: none; border: 0; cursor: pointer;
+     padding: 8px 12px; border-radius: 10px;
+     background: #22c55e; color: #052e14; font-weight: 800;
      box-shadow: 0 2px 0 #138a3d;
-     cursor: pointer;
    }
-   #restartBtn:active { transform: translateY(1px); }
-
    main {
      width: 100%;
      display: grid;
      place-items: center;
    }
+   /* Canvas gets sized by JS; keep crisp pixels */
+   #board { image-rendering: pixelated; border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,0.35); }
 
-   /* Game board */
-   #board {
-     background: var(--board);
-     width: 360px;
-     height: 480px;
-     /* maintain crisp pixel grid */
-     image-rendering: pixelated;
-     border-radius: 8px;
-     box-shadow: 0 8px 24px rgba(0,0,0,0.35);
-     touch-action: none;
-   }
-
-   /* Controller area */
+   /* Compact one-row control pad (always visible) */
    .pad {
      width: 100%;
-     max-width: 720px;
-     margin: 8px auto 16px;
-     display: grid;
-     grid-template-columns: 1fr auto 1fr;
-     grid-template-rows: auto auto auto;
+     max-width: 900px;
+     padding: 6px 10px calc(6px + var(--safe-bottom));
+     box-sizing: border-box;
+     display: flex;
      gap: 10px;
+     justify-content: center;
      align-items: center;
-     justify-items: center;
-     user-select: none;
    }
    .btn {
-     width: min(26vw, 110px);
-     height: min(26vw, 110px);
-     max-width: 110px;
-     max-height: 110px;
-     min-width: 64px;
-     min-height: 64px;
-     border-radius: 18px;
+     width: clamp(56px, 16vw, 84px);
+     height: clamp(56px, 16vw, 84px);
+     border-radius: 14px;
      border: 0;
      background: #0ea5e9;
      color: white;
-     font-size: clamp(18px, 5vw, 28px);
-     font-weight: 800;
+     font-size: clamp(18px, 5vw, 26px);
+     font-weight: 900;
+     display: grid; place-items: center;
      box-shadow: 0 6px 0 #0b6da0;
-     display: grid;
-     place-items: center;
-     cursor: pointer;
-     touch-action: manipulation;
+     touch-action: manipulation; cursor: pointer;
    }
    .btn:active { transform: translateY(2px); }
-   .btn.small { width: min(22vw, 90px); height: min(22vw, 90px); }
 
-   /* D-pad layout */
-   #btnUp    { grid-column: 2; grid-row: 1; }
-   #btnLeft  { grid-column: 1; grid-row: 2; justify-self: end; }
-   #btnRight { grid-column: 3; grid-row: 2; justify-self: start; }
-   #btnDown  { grid-column: 2; grid-row: 3; }
-
-   /* Overlay for Game Over/Start */
+   /* Overlay */
    #overlay {
-     position: fixed;
-     inset: 0;
+     position: fixed; inset: 0; z-index: 10;
+     display: none; align-items: center; justify-content: center;
      background: rgba(0,0,0,0.6);
-     display: none;
-     align-items: center;
-     justify-content: center;
-     text-align: center;
      padding: 16px;
-     z-index: 10;
    }
    .card {
      background: #0c2230;
      border: 1px solid rgba(255,255,255,0.1);
      border-radius: 16px;
-     padding: 18px 16px;
-     max-width: 520px;
-     width: calc(100% - 24px);
+     padding: 16px;
+     width: min(520px, calc(100% - 24px));
+     text-align: center;
      box-shadow: 0 10px 30px rgba(0,0,0,0.4);
    }
-   .card h1 {
-     margin: 0 0 8px;
-     font-size: 24px;
-   }
-   .card p { margin: 6px 0 12px; opacity: 0.85; }
-   .row {
-     display: flex;
-     gap: 10px;
-     flex-wrap: wrap;
-     justify-content: center;
-     margin-top: 10px;
-   }
-   .ghost {
-     opacity: 0.75;
-     font-size: 14px;
-   }
+   .card h1 { margin: 0 0 8px; font-size: 22px; }
+   .row { display: flex; gap: 10px; justify-content: center; margin-top: 8px; }
+   .ghost { opacity: 0.8; font-size: 14px; }
 
-   /* Responsive board sizing for phones */
-   @media (max-width: 420px) {
-     #board {
-       width: 92vw;
-       height: 122.5vw; /* keep 360x480 ratio = 3:4 */
-       max-height: 78dvh;
-     }
-   }
  </style>
 </head>
 <body>
@@ -186,14 +123,16 @@
    </header>
 
    <main>
-     <canvas id="board" width="360" height="480"></canvas>
+     <!-- Size is set dynamically by JS; start with a small default -->
+     <canvas id="board" width="300" height="400"></canvas>
    </main>
-<!-- D-Pad -->
+
+   <!-- One-row controls -->
    <div class="pad" aria-label="On-screen controller">
-     <button id="btnUp" class="btn" aria-label="Up">▲</button>
-     <button id="btnLeft" class="btn" aria-label="Left">◀</button>
+     <button id="btnLeft"  class="btn" aria-label="Left">◀</button>
+     <button id="btnUp"    class="btn" aria-label="Up">▲</button>
+     <button id="btnDown"  class="btn" aria-label="Down">▼</button>
      <button id="btnRight" class="btn" aria-label="Right">▶</button>
-     <button id="btnDown" class="btn" aria-label="Down">▼</button>
    </div>
  </div>
 
@@ -201,31 +140,28 @@
  <div id="overlay">
    <div class="card">
      <h1 id="overlayTitle">Snake</h1>
-     <p id="overlayMsg">Eat red food. Avoid poison. Golden food is rare and powerful. Survive for 60 seconds!</p>
+     <p id="overlayMsg">Eat red food. Avoid poison. Golden is rare (+5 & +5 length). Survive 60 seconds!</p>
      <div class="row">
-       <button id="startBtn" class="btn small" style="background:#22c55e; box-shadow:0 6px 0 #138a3d;">Start</button>
-       <button id="overlayRestartBtn" class="btn small">Restart</button>
+       <button id="startBtn" class="btn" style="background:#22c55e; box-shadow:0 6px 0 #138a3d;">Start</button>
+       <button id="overlayRestartBtn" class="btn">Restart</button>
      </div>
-     <p class="ghost">Controls: D-pad on screen, or Arrow keys / WASD.</p>
+     <p class="ghost">Controls: buttons below, or Arrow keys / WASD.</p>
    </div>
  </div>
-
- <!-- Firebase (modular v10 CDN) -->
+<!-- Firebase (modular v10 CDN) -->
  <script type="module">
    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-app.js";
-   import {
-     getFirestore, collection, addDoc, serverTimestamp
-   } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-firestore.js";
+   import { getFirestore, collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-firestore.js";
 
-   // TODO: REPLACE with your Firebase web config
+   /* 1) PASTE YOUR CONFIG HERE */
    const firebaseConfig = {
-  apiKey: "AIzaSyCB1IQNSy8pGFXgv9S1P4f0sTLyPxiUv9k",
-  authDomain: "snake-web-b6745.firebaseapp.com",
-  projectId: "snake-web-b6745",
-  storageBucket: "snake-web-b6745.firebasestorage.app",
-  messagingSenderId: "242732126109",
-  appId: "1:242732126109:web:1d44c9bf8371f238792974"
-};
+     apiKey: "YOUR_API_KEY",
+     authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+     projectId: "YOUR_PROJECT_ID",
+     storageBucket: "YOUR_PROJECT_ID.appspot.com",
+     messagingSenderId: "YOUR_SENDER_ID",
+     appId: "YOUR_APP_ID"
+   };
 
    let db = null;
    try {
@@ -236,210 +172,177 @@
      console.warn("Firebase not configured or blocked; scores won't be saved.", e);
    }
 
-   // ---------- Game ----------
+   /* ---------- Game (auto-fit, no scroll) ---------- */
    const canvas = document.getElementById('board');
    const ctx = canvas.getContext('2d');
    const scoreEl = document.getElementById('score');
-   const timeEl = document.getElementById('time');
+   const timeEl  = document.getElementById('time');
    const overlay = document.getElementById('overlay');
    const overlayTitle = document.getElementById('overlayTitle');
-   const overlayMsg = document.getElementById('overlayMsg');
+   const overlayMsg   = document.getElementById('overlayMsg');
    const startBtn = document.getElementById('startBtn');
    const overlayRestartBtn = document.getElementById('overlayRestartBtn');
    const restartBtn = document.getElementById('restartBtn');
 
-   // D-pad buttons
    const btnUp = document.getElementById('btnUp');
    const btnDown = document.getElementById('btnDown');
    const btnLeft = document.getElementById('btnLeft');
    const btnRight = document.getElementById('btnRight');
 
-   // Grid
-   const CELL = 10;          // size per cell (px)
-   const COLS = canvas.width / CELL;   // 360/10 = 36
-   const ROWS = canvas.height / CELL;  // 480/10 = 48
+   /* Grid */
+   const CELL = 10;          // size per cell
+   let COLS = canvas.width / CELL;
+   let ROWS = canvas.height / CELL;
 
-   // Colors
-   const COL = {
-     bg: "#327aa8",
-     snake: "#00ff00",
-     food: "#d53250",
-     poison: "#a020f0",
-     gold: "#ffd700",
-     ob: "#a9a9a9"
-   };
+   /* Colors */
+   const COL = { bg:"#327aa8", snake:"#00ff00", food:"#d53250", poison:"#a020f0", gold:"#ffd700", ob:"#a9a9a9" };
 
-   // Timing
-   const TICK_HZ = 15;                   // snake speed
+   /* Timing */
+   const TICK_HZ = 15;
    const TICK_MS = 1000 / TICK_HZ;
-   const ROUND_LIMIT = 60;               // seconds
+   const ROUND_LIMIT = 60;
 
-   // Poison visibility cycle
    const POISON_VISIBLE_SECS = 3.0;
-   const POISON_HIDDEN_SECS = 1.0;
-
-   // Golden food life
+   const POISON_HIDDEN_SECS  = 1.0;
    const GOLDEN_LIFE = 5.0;
 
-   // State
    let running = false;
-   let roundStart = null;   // set on first movement
-   let lastTick = 0;
-   let acc = 0;
+   let roundStart = null;
+   let lastTick = 0, acc = 0;
 
    let snake, snakeLen, dir, nextDir, score, food, poison, poisonStart, golden, goldenStart, obstacles;
 
-   // Utils
-   const randCell = () => ({
-     x: Math.floor(Math.random() * COLS) * CELL,
-     y: Math.floor(Math.random() * ROWS) * CELL
-   });
    const same = (a, b) => a.x === b.x && a.y === b.y;
+   const randCell = () => ({ x: Math.floor(Math.random()*COLS)*CELL,
+                             y: Math.floor(Math.random()*ROWS)*CELL });
 
    function generateSafeObstacle() {
-     const forbidden = new Set();
-     snake.forEach(s => forbidden.add(`${s.x},${s.y}`));
-     forbidden.add(`${food.x},${food.y}`);
-     if (golden) forbidden.add(`${golden.x},${golden.y}`);
-     poison.forEach(p => forbidden.add(`${p.x},${p.y}`));
+     const blocked = new Set();
+     snake.forEach(s => blocked.add(`${s.x},${s.y}`));
+     blocked.add(`${food.x},${food.y}`);
+     if (golden) blocked.add(`${golden.x},${golden.y}`);
+     poison.forEach(p => blocked.add(`${p.x},${p.y}`));
      while (true) {
        const c = randCell();
-       const key = `${c.x},${c.y}`;
-       if (!forbidden.has(key)) return c;
+       if (!blocked.has(`${c.x},${c.y}`)) return c;
      }
    }
 
    function reset() {
-     running = false;
-     roundStart = null;
-     lastTick = 0;
-     acc = 0;
+     running = false; roundStart = null; lastTick = 0; acc = 0;
 
-     const cx = Math.floor(COLS/2) * CELL;
-     const cy = Math.floor(ROWS/2) * CELL;
+     const cx = Math.floor(COLS/2)*CELL;
+     const cy = Math.floor(ROWS/2)*CELL;
 
      snake = [{x: cx, y: cy}];
      snakeLen = 1;
-     dir = {x: 0, y: 0};
-     nextDir = {x: 0, y: 0};
+     dir = {x:0,y:0};
+     nextDir = {x:0,y:0};
      score = 0;
      food = randCell();
 
      poison = [randCell(), randCell(), randCell(), randCell()];
      poisonStart = performance.now();
 
-     golden = null;
-     goldenStart = null;
-
+     golden = null; goldenStart = null;
      obstacles = [];
 
      scoreEl.textContent = "Score: 0";
      timeEl.textContent = "Time: 60";
 
-     drawAll(); // draw idle board
-     showOverlay("Snake", "Eat red food. Avoid poison. Golden is rare (+5 & +5 length). Survive 60s!");
+     drawAll();
+     showOverlay("Snake", "Eat red food. Avoid poison. Golden is rare (+5 & +5 length). Survive 60 seconds!");
    }
 
-   function showOverlay(title, msg) {
-     overlayTitle.textContent = title;
-     overlayMsg.textContent = msg;
-     overlay.style.display = "flex";
-   }
-   function hideOverlay() {
-     overlay.style.display = "none";
+   function showOverlay(title, msg){ overlayTitle.textContent = title; overlayMsg.textContent = msg; overlay.style.display = "flex"; }
+   function hideOverlay(){ overlay.style.display = "none"; }
+
+   /* ----- Auto-resize canvas to fit without scrolling ----- */
+   function resizeCanvas() {
+     const headerH = document.querySelector('header').offsetHeight;
+     const padH = document.querySelector('.pad').offsetHeight;
+     const vw = window.innerWidth;
+     const vh = window.innerHeight;
+
+     // Remaining vertical space for canvas (include small margin)
+     const margin = 14;
+     const availableH = Math.max(140, vh - headerH - padH - margin);
+     const availableW = Math.max(140, vw - 20);
+
+     // Keep 3:4 ratio (W:H = 3:4)
+     let w = Math.min(availableW, availableH * 3/4);
+     let h = w * 4/3;
+
+     // Snap to CELL multiples for crisp grid
+     w = Math.floor(w / CELL) * CELL;
+     h = Math.floor(h / CELL) * CELL;
+
+     canvas.style.width  = w + "px";
+     canvas.style.height = h + "px";
+     canvas.width  = w;
+     canvas.height = h;
+
+     COLS = w / CELL;
+     ROWS = h / CELL;
+
+     // If game not running, redraw idle board at new size
+     if (!running) drawAll();
    }
 
-   // Drawing
-   function drawCell(c, color) {
-     ctx.fillStyle = color;
-     ctx.fillRect(c.x, c.y, CELL, CELL);
-   }
-   function drawAll() {
+   window.addEventListener('resize', () => { resizeCanvas(); });
+
+   /* Drawing */
+   function drawCell(c, color){ ctx.fillStyle = color; ctx.fillRect(c.x, c.y, CELL, CELL); }
+   function drawAll(){
      ctx.fillStyle = COL.bg;
-     ctx.fillRect(0, 0, canvas.width, canvas.height);
+     ctx.fillRect(0,0,canvas.width,canvas.height);
 
-     // food
      drawCell(food, COL.food);
 
-     // poison visibility cycle
+     // Poison visible/hidden cycle
      const now = performance.now();
      const t = (now - poisonStart) / 1000;
      const cycle = POISON_VISIBLE_SECS + POISON_HIDDEN_SECS;
      const phase = t % cycle;
      const showPoison = phase <= POISON_VISIBLE_SECS;
-     if (showPoison) {
-       poison.forEach(p => drawCell(p, COL.poison));
-     } else {
-       // when cycle flips hidden->visible, respawn
-       if (phase < 0.05) {
-         poison = [randCell(), randCell(), randCell(), randCell()];
-       }
-     }
+     if (showPoison) { poison.forEach(p => drawCell(p, COL.poison)); }
+     else if (phase < 0.05) { poison = [randCell(), randCell(), randCell(), randCell()]; }
 
-     // golden
      if (golden) {
        drawCell(golden, COL.gold);
-       if ((now - goldenStart) / 1000 > GOLDEN_LIFE) golden = null;
+       if ((now - goldenStart)/1000 > GOLDEN_LIFE) golden = null;
      }
 
-     // obstacles
      obstacles.forEach(o => drawCell(o, COL.ob));
-
-     // snake
      snake.forEach(s => drawCell(s, COL.snake));
    }
 
-   // Game tick (fixed time-step)
-   function tick() {
-     // start timer when snake moves first time
-     if (!roundStart && (nextDir.x !== 0 || nextDir.y !== 0)) {
-       roundStart = performance.now();
-     }
+   /* Tick */
+   function tick(){
+     if (!roundStart && (nextDir.x !== 0 || nextDir.y !== 0)) roundStart = performance.now();
 
-     // update direction (prevent 180° reverse)
-     if (snake.length < 2 || (snake[snake.length-1].x + nextDir.x !== snake[snake.length-2].x ||
-                               snake[snake.length-1].y + nextDir.y !== snake[snake.length-2].y)) {
+     // prevent 180° reverse
+     if (snake.length < 2 ||
+         (snake[snake.length-1].x + nextDir.x !== snake[snake.length-2].x ||
+          snake[snake.length-1].y + nextDir.y !== snake[snake.length-2].y)) {
        dir = {...nextDir};
      }
 
-     // move
-     const head = snake[snake.length - 1];
+     const head = snake[snake.length-1];
      const nx = head.x + dir.x;
      const ny = head.y + dir.y;
-     const newHead = {x: nx, y: ny};
+     const newHead = {x:nx,y:ny};
 
-     // boundaries end game
-     if (nx < 0 || nx >= canvas.width || ny < 0 || ny >= canvas.height) {
-       endRound();
-       return;
-     }
+     if (nx < 0 || nx >= canvas.width || ny < 0 || ny >= canvas.height) { endRound(); return; }
 
      snake.push(newHead);
      while (snake.length > snakeLen) snake.shift();
 
-     // self collision
-     for (let i = 0; i < snake.length - 1; i++) {
-       if (same(snake[i], newHead)) {
-         endRound();
-         return;
-       }
-     }
+     for (let i=0;i<snake.length-1;i++){ if (same(snake[i], newHead)) { endRound(); return; } }
+     for (const o of obstacles){ if (same(o, newHead)) { endRound(); return; } }
 
-     // obstacles collision
-     for (const o of obstacles) {
-       if (same(o, newHead)) {
-         endRound();
-         return;
-       }
-     }
+     if (!golden && Math.random() <= 0.03) { golden = randCell(); goldenStart = performance.now(); }
 
-     // maybe spawn golden (3% chance per tick)
-     if (!golden && Math.random() <= 0.03) {
-       golden = randCell();
-       goldenStart = performance.now();
-     }
-
-     // eat normal food
      if (same(newHead, food)) {
        food = randCell();
        snakeLen += 1;
@@ -448,137 +351,89 @@
        obstacles.push(generateSafeObstacle());
      }
 
-     // poison visibility state
      const now = performance.now();
-     const t = (now - poisonStart) / 1000;
+     const t = (now - poisonStart)/1000;
      const cycle = POISON_VISIBLE_SECS + POISON_HIDDEN_SECS;
      const phase = t % cycle;
      const showPoison = phase <= POISON_VISIBLE_SECS;
      if (showPoison) {
-       // eat poison
-       for (let i = poison.length - 1; i >= 0; i--) {
+       for (let i=poison.length-1;i>=0;i--){
          if (same(poison[i], newHead)) {
-           poison.splice(i, 1);
+           poison.splice(i,1);
            score = Math.max(0, score - 2);
            scoreEl.textContent = "Score: " + score;
          }
        }
-     } else {
-       // on edge of cycle, respawn handled in draw
      }
 
-     // eat golden
      if (golden && same(golden, newHead)) {
-       score += 5;
-       snakeLen += 5;
-       scoreEl.textContent = "Score: " + score;
-       for (let i = 0; i < 5; i++) obstacles.push(generateSafeObstacle());
+       score += 5; snakeLen += 5; scoreEl.textContent = "Score: " + score;
+       for (let i=0;i<5;i++) obstacles.push(generateSafeObstacle());
        golden = null;
      }
 
-     // timer HUD
      if (roundStart) {
-       const elapsed = (performance.now() - roundStart) / 1000;
+       const elapsed = (performance.now() - roundStart)/1000;
        const remain = Math.max(0, ROUND_LIMIT - Math.floor(elapsed));
        timeEl.textContent = "Time: " + remain;
-       if (elapsed >= ROUND_LIMIT) {
-         endRound();
-         return;
-       }
+       if (elapsed >= ROUND_LIMIT) { endRound(); return; }
      }
 
      drawAll();
    }
 
-   function loop(ts) {
+   function loop(ts){
      if (!running) return;
      if (!lastTick) lastTick = ts;
-     const dt = ts - lastTick;
-     lastTick = ts;
-     acc += dt;
-
-     // run fixed ticks
-     while (acc >= TICK_MS) {
-       tick();
-       acc -= TICK_MS;
-       if (!running) return; // ended during tick
-     }
+     const dt = ts - lastTick; lastTick = ts; acc += dt;
+     while (acc >= TICK_MS) { tick(); acc -= TICK_MS; if (!running) return; }
      requestAnimationFrame(loop);
    }
-async function endRound() {
+
+   async function endRound(){
      running = false;
      drawAll();
      showOverlay("Game Over", `Your Score: ${score}`);
-
-     // save to Firestore
      if (db) {
        try {
-         const colRef = collection(db, "scores");
-         await addDoc(colRef, {
+         await addDoc(collection(db, "scores"), {
            game: "snake",
            score: score,
            created_at: serverTimestamp()
          });
-         console.log("Score saved");
-       } catch (e) {
-         console.warn("Failed to save score:", e);
-       }
+       } catch (e) { console.warn("Failed to save score:", e); }
      }
    }
 
-   // Controls
-   function setDir(x, y) { nextDir = {x, y}; }
-
-   // Buttons — single tap sets direction (no double movement)
+   /* Controls */
+   function setDir(x,y){ nextDir = {x,y}; }
    const pressHandlers = [
-     [btnUp,    () => setDir(0, -CELL)],
-     [btnDown,  () => setDir(0,  CELL)],
-     [btnLeft,  () => setDir(-CELL, 0)],
-     [btnRight, () => setDir( CELL, 0)],
+     [btnUp,    () => setDir(0,-CELL)],
+     [btnDown,  () => setDir(0, CELL)],
+     [btnLeft,  () => setDir(-CELL,0)],
+     [btnRight, () => setDir( CELL,0)],
    ];
    for (const [el, fn] of pressHandlers) {
-     // Touch
-     el.addEventListener('touchstart', (e) => { e.preventDefault(); fn(); }, { passive: false });
-     // Mouse (desktop)
-     el.addEventListener('mousedown', (e) => { e.preventDefault(); fn(); });
+     el.addEventListener('touchstart', e => { e.preventDefault(); fn(); }, {passive:false});
+     el.addEventListener('mousedown',   e => { e.preventDefault(); fn(); });
    }
-
-   // Keyboard
-   window.addEventListener('keydown', (e) => {
-     switch (e.key) {
-       case "ArrowUp":
-       case "w":
-       case "W":
-         setDir(0, -CELL); break;
-       case "ArrowDown":
-       case "s":
-       case "S":
-         setDir(0,  CELL); break;
-       case "ArrowLeft":
-       case "a":
-       case "A":
-         setDir(-CELL, 0); break;
-       case "ArrowRight":
-       case "d":
-       case "D":
-         setDir( CELL, 0); break;
+   window.addEventListener('keydown', e => {
+     switch (e.key){
+       case "ArrowUp": case "w": case "W": setDir(0,-CELL); break;
+       case "ArrowDown": case "s": case "S": setDir(0, CELL); break;
+       case "ArrowLeft": case "a": case "A": setDir(-CELL,0); break;
+       case "ArrowRight": case "d": case "D": setDir( CELL,0); break;
      }
    });
 
-   // Restart buttons
-   function startGame() {
-     hideOverlay();
-     running = true;
-     lastTick = 0;
-     acc = 0;
-     requestAnimationFrame(loop);
-   }
+   function startGame(){ hideOverlay(); running = true; lastTick = 0; acc = 0; requestAnimationFrame(loop); }
    restartBtn.addEventListener('click', () => { reset(); startGame(); });
    overlayRestartBtn.addEventListener('click', () => { reset(); startGame(); });
    startBtn.addEventListener('click', () => { reset(); startGame(); });
 
-   // Initial
-   reset();
+   // Init
+   resizeCanvas();   // size to viewport first
+   reset();          // draw idle state
  </script>
 </body>
 </html>
