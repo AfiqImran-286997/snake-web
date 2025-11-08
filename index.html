@@ -2,10 +2,8 @@
 <html lang="en">
 <head>
  <meta charset="UTF-8" />
- <meta
-   name="viewport"
-   content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
- />
+ <meta name="viewport"
+       content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
  <title>Snake — Mobile Web + Firebase (Home + Name + D-pad)</title>
  <style>
    :root{
@@ -65,7 +63,7 @@
    #btnRight{ grid-column:3; grid-row:2; }
    #btnDown { grid-column:2; grid-row:3; }
 
-   /* Overlay (used for Home, Name prompt, and Game Over) */
+   /* Overlay (Home, Name, Game Over) */
    #overlay{
      position:fixed; inset:0; z-index:10; display:none; align-items:center; justify-content:center;
      background:rgba(0,0,0,0.6); padding:16px;
@@ -118,68 +116,60 @@
      </div>
    </div>
  </div>
-<!-- Overlay -->
- <div id="overlay">
-   <div class="card" id="overlayCard"><!-- content set by JS --></div>
- </div>
+
+ <!-- Overlay -->
+ <div id="overlay"><div class="card" id="overlayCard"></div></div>
 
  <!-- Firebase + Game -->
  <script type="module">
    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-app.js";
    import { getFirestore, collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-firestore.js";
 
-   /* ===== PASTE YOUR CONFIG HERE ===== */
-const firebaseConfig = {
-  apiKey: "AIzaSyCB1IQNSy8pGFXgv9S1P4f0sTLyPxiUv9k",
-  authDomain: "snake-web-b6745.firebaseapp.com",
-  projectId: "snake-web-b6745",
-  storageBucket: "snake-web-b6745.firebasestorage.app",
-  messagingSenderId: "242732126109",
-  appId: "1:242732126109:web:1d44c9bf8371f238792974"
-};
+   /* ===== YOUR FIREBASE CONFIG ===== */
+   const firebaseConfig = {
+     apiKey: "AIzaSyCB1IQNSy8pGFXgv9S1P4f0sTLyPxiUv9k",
+     authDomain: "snake-web-b6745.firebaseapp.com",
+     projectId: "snake-web-b6745",
+     storageBucket: "snake-web-b6745.firebasestorage.app",
+     messagingSenderId: "242732126109",
+     appId: "1:242732126109:web:1d44c9bf8371f238792974"
+   };
 
    let db=null;
    try{ const app = initializeApp(firebaseConfig); db = getFirestore(app); }
    catch(e){ console.warn("Firebase not configured; scores won't be saved.", e); }
 
-   /* ---------- UI helpers (overlay) ---------- */
+   /* ---------- Overlay helpers ---------- */
    const overlay = document.getElementById('overlay');
    const card = document.getElementById('overlayCard');
    function openOverlay(html){ card.innerHTML = html; overlay.style.display="flex"; }
    function closeOverlay(){ overlay.style.display="none"; }
 
-   /* ---------- Persistent player name ---------- */
+   /* ---------- Name storage & screens ---------- */
    const LS_KEY = "snake_player_name";
-   function getName(){ return (localStorage.getItem(LS_KEY) || "").trim(); }
-   function saveName(n){ localStorage.setItem(LS_KEY, n.trim()); showPlayerTag(); }
+   const getName = () => (localStorage.getItem(LS_KEY) || "").trim();
+   const saveName = n => { localStorage.setItem(LS_KEY, n.trim()); showPlayerTag(); };
+
    function showPlayerTag(){
+     const n = getName();
      const t = document.getElementById('playerTag');
      const c = document.getElementById('changeName');
-     const n = getName();
-     if(n){
-       t.textContent = "Player: " + n;
-       c.hidden = false;
-     }else{
-       t.textContent = "Player: (not set)";
-       c.hidden = true;
-     }
+     if(n){ t.textContent = "Player: " + n; c.hidden = false; }
+     else { t.textContent = "Player: (not set)"; c.hidden = true; }
    }
-
-   function showNamePrompt(next="home"){
+function showNamePrompt(next="home"){
      openOverlay(`
        <h1>Welcome!</h1>
        <p>Please enter your player name.</p>
        <input id="nameInput" class="text" maxlength="20" placeholder="e.g., Afiq" />
-       <div class="row">
-         <button id="saveNameBtn" class="cta">Save</button>
-       </div>
+       <div class="row"><button id="saveNameBtn" class="cta">Save</button></div>
      `);
      document.getElementById('saveNameBtn').onclick = () => {
        const v = String(document.getElementById('nameInput').value||"").trim();
        if(v.length < 2){ alert("Name must be at least 2 characters."); return; }
        saveName(v);
        if(next==="play"){ reset(); closeOverlay(); startGame(); }
-       else showHome();
+       else { showHome(); }
      };
      document.getElementById('nameInput').focus();
    }
@@ -204,7 +194,7 @@ const firebaseConfig = {
 
    document.getElementById('changeName').onclick = () => showNamePrompt("home");
 
-   /* ---------- Game (same rules as before) ---------- */
+   /* ---------- Game ---------- */
    const canvas = document.getElementById('board');
    const ctx = canvas.getContext('2d');
    const scoreEl = document.getElementById('score');
@@ -237,9 +227,7 @@ const firebaseConfig = {
      blocked.add(`${food.x},${food.y}`);
      if(golden) blocked.add(`${golden.x},${golden.y}`);
      poison.forEach(p=>blocked.add(`${p.x},${p.y}`));
-     while(true){
-       const c=randCell(); if(!blocked.has(`${c.x},${c.y}`)) return c;
-     }
+     while(true){ const c=randCell(); if(!blocked.has(`${c.x},${c.y}`)) return c; }
    }
 
    function reset(){
@@ -356,10 +344,7 @@ const firebaseConfig = {
      if(db){
        try{
          await addDoc(collection(db,"scores"), {
-           game:"snake",
-           name:n,
-           score,
-           created_at: serverTimestamp()
+           game:"snake", name:n, score, created_at: serverTimestamp()
          });
        }catch(e){ console.warn("Failed to save score:", e); }
      }
@@ -388,7 +373,7 @@ const firebaseConfig = {
    function startGame(){ closeOverlay(); running=true; lastTick=0; acc=0; requestAnimationFrame(loop); }
    restartBtn.addEventListener('click', ()=>{ reset(); startGame(); });
 
-   /* Init: size, show name in HUD, then Home screen (or Name prompt on first visit) */
+   /* ---- Init: size canvas, show HUD, then Name-first or Menu ---- */
    resizeCanvas();
    showPlayerTag();
    if(getName()){ showHome(); } else { showNamePrompt("home"); }
