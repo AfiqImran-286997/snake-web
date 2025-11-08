@@ -129,14 +129,14 @@
    import { getFirestore, collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-firestore.js";
 
    /* ===== PASTE YOUR CONFIG HERE ===== */
-   const firebaseConfig = {
-     apiKey: "YOUR_API_KEY",
-     authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-     projectId: "YOUR_PROJECT_ID",
-     storageBucket: "YOUR_PROJECT_ID.appspot.com",
-     messagingSenderId: "YOUR_SENDER_ID",
-     appId: "YOUR_APP_ID"
-   };
+const firebaseConfig = {
+  apiKey: "AIzaSyCB1IQNSy8pGFXgv9S1P4f0sTLyPxiUv9k",
+  authDomain: "snake-web-b6745.firebaseapp.com",
+  projectId: "snake-web-b6745",
+  storageBucket: "snake-web-b6745.firebasestorage.app",
+  messagingSenderId: "242732126109",
+  appId: "1:242732126109:web:1d44c9bf8371f238792974"
+};
 
    let db=null;
    try{ const app = initializeApp(firebaseConfig); db = getFirestore(app); }
