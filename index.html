@@ -157,7 +157,8 @@
      if(n){ t.textContent = "Player: " + n; c.hidden = false; }
      else { t.textContent = "Player: (not set)"; c.hidden = true; }
    }
-function showNamePrompt(next="home"){
+
+   function showNamePrompt(next="home"){
      openOverlay(`
        <h1>Welcome!</h1>
        <p>Please enter your player name.</p>
@@ -173,8 +174,7 @@ function showNamePrompt(next="home"){
      };
      document.getElementById('nameInput').focus();
    }
-
-   function showHome(){
+function showHome(){
      const n = getName();
      openOverlay(`
        <h1>Snake</h1>
@@ -251,13 +251,15 @@ function showNamePrompt(next="home"){
      w=Math.floor(w/CELL)*CELL; h=Math.floor(h/CELL)*CELL;
      canvas.style.width=w+"px"; canvas.style.height=h+"px"; canvas.width=w; canvas.height=h;
      COLS=w/CELL; ROWS=h/CELL;
-     if(!running) drawAll();
+     /* only redraw if game state exists */
+     if (Array.isArray(snake) && snake.length) drawAll();
    }
    window.addEventListener('resize', resizeCanvas);
 
    function drawCell(c,color){ ctx.fillStyle=color; ctx.fillRect(c.x,c.y,CELL,CELL); }
    function drawAll(){
      ctx.fillStyle=COL.bg; ctx.fillRect(0,0,canvas.width,canvas.height);
+     if(!snake) return;
      drawCell(food, COL.food);
      const now=performance.now();
      const t=(now-poisonStart)/1000, cycle=POISON_VISIBLE_SECS+POISON_HIDDEN_SECS, phase=t%cycle;
@@ -310,9 +312,9 @@ function showNamePrompt(next="home"){
 
      if(roundStart){
        const elapsed=(performance.now()-roundStart)/1000;
-       const remain=Math.max(0, ROUND_LIMIT - Math.floor(elapsed));
+       const remain=Math.max(0, 60 - Math.floor(elapsed));
        timeEl.textContent="Time: "+remain;
-       if(elapsed>=ROUND_LIMIT){ endRound(); return; }
+       if(elapsed>=60){ endRound(); return; }
      }
 
      drawAll();
@@ -322,7 +324,7 @@ function showNamePrompt(next="home"){
      if(!running) return;
      if(!lastTick) lastTick=ts;
      const dt=ts-lastTick; lastTick=ts; acc+=dt;
-     while(acc>=TICK_MS){ tick(); acc-=TICK_MS; if(!running) return; }
+     while(acc>= (1000/15) ){ tick(); acc-= (1000/15); if(!running) return; }
      requestAnimationFrame(loop);
    }
 
@@ -371,12 +373,13 @@ function showNamePrompt(next="home"){
    });
 
    function startGame(){ closeOverlay(); running=true; lastTick=0; acc=0; requestAnimationFrame(loop); }
-   restartBtn.addEventListener('click', ()=>{ reset(); startGame(); });
+   document.getElementById('restartBtn').addEventListener('click', ()=>{ reset(); startGame(); });
 
-   /* ---- Init: size canvas, show HUD, then Name-first or Menu ---- */
-   resizeCanvas();
-   showPlayerTag();
-   if(getName()){ showHome(); } else { showNamePrompt("home"); }
+   /* ---- INIT ORDER FIX ---- */
+   showPlayerTag();          // 1) HUD name
+   reset();                  // 2) create game state BEFORE any drawing
+   resizeCanvas();           // 3) fit to device (will redraw safely)
+   if(getName()){ showHome(); } else { showNamePrompt("home"); } // 4) show Name or Menu first
  </script>
 </body>
 </html>
