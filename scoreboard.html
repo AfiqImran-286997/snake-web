@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+ <meta charset="UTF-8" />
+ <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+ <title>Snake — Scoreboard</title>
+ <style>
+   body{ margin:0; background:#0c2230; color:#fff; font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial; }
+   .wrap{ max-width:900px; margin:0 auto; padding:16px; }
+   header{ display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
+   a.btn, button.btn{
+     appearance:none; border:0; border-radius:10px; padding:10px 14px; font-weight:800; cursor:pointer;
+     background:#0ea5e9; color:#fff; text-decoration:none; display:inline-block;
+     box-shadow:0 2px 0 #0b6da0;
+   }
+   table{ width:100%; border-collapse:collapse; background:#0a1a24; border:1px solid #22485e; border-radius:10px; overflow:hidden;}
+   th, td{ padding:10px; border-bottom:1px solid #18384a; text-align:left; }
+   th{ background:#0d2d40; }
+   tr:last-child td{ border-bottom:0; }
+   .muted{ opacity:.8; }
+ </style>
+</head>
+<body>
+ <div class="wrap">
+   <header>
+     <h1 style="margin:0">Snake — Scoreboard</h1>
+     <div>
+       <a href="index.html" class="btn">Home</a>
+     </div>
+   </header>
+
+   <p class="muted">Showing top scores for <b>Snake</b>. Your name is saved in your browser and attached to your scores.</p>
+
+   <table id="table">
+     <thead>
+       <tr><th>#</th><th>Name</th><th>Score</th><th>Date</th></tr>
+     </thead>
+     <tbody id="rows">
+       <tr><td colspan="4" class="muted">Loading…</td></tr>
+     </tbody>
+   </table>
+ </div>
+
+ <script type="module">
+   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-app.js";
+   import { getFirestore, collection, query, where, orderBy, limit, getDocs } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-firestore.js";
+
+   /* SAME CONFIG AS index.html */
+const firebaseConfig = {
+  apiKey: "AIzaSyCB1IQNSy8pGFXgv9S1P4f0sTLyPxiUv9k",
+  authDomain: "snake-web-b6745.firebaseapp.com",
+  projectId: "snake-web-b6745",
+  storageBucket: "snake-web-b6745.firebasestorage.app",
+  messagingSenderId: "242732126109",
+  appId: "1:242732126109:web:1d44c9bf8371f238792974"
+};
+   const app = initializeApp(firebaseConfig);
+   const db  = getFirestore(app);
+
+   async function loadScores(){
+     const rows = document.getElementById('rows');
+     rows.innerHTML = `<tr><td colspan="4" class="muted">Loading…</td></tr>`;
+
+     try{
+       const q = query(
+         collection(db,"scores"),
+         where("game","==","snake"),
+         orderBy("score","desc"),
+         limit(50)
+       );
+       const snap = await getDocs(q);
+       if(snap.empty){ rows.innerHTML = `<tr><td colspan="4" class="muted">No scores yet.</td></tr>`; return; }
+
+       let i=0, html="";
+       snap.forEach(doc=>{
+         const d = doc.data();
+         const name = (d.name || "(anon)").toString().slice(0,20);
+         const score = d.score ?? 0;
+         const dt = d.created_at && d.created_at.toDate ? d.created_at.toDate() : null;
+         const dateStr = dt ? dt.toLocaleString() : "-";
+         html += `<tr>
+           <td>${++i}</td><td>${escapeHtml(name)}</td><td>${score}</td><td>${dateStr}</td>
+         </tr>`;
+       });
+       rows.innerHTML = html;
+     }catch(e){
+       rows.innerHTML = `<tr><td colspan="4" class="muted">Failed to load scores.</td></tr>`;
+       console.warn(e);
+     }
+   }
+
+   /* simple HTML escape */
+   function escapeHtml(s){ return s.replace(/[&<>"']/g, m=>({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[m])) }
+
+   loadScores();
+ </script>
+</body>
+</html>
