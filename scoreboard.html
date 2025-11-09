@@ -2,44 +2,60 @@
 <html lang="en">
 <head>
  <meta charset="UTF-8" />
- <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+ <meta name="viewport"
+       content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
  <title>Snake — Scoreboard</title>
  <style>
-   body{ margin:0; background:#0c2230; color:#fff; font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial; }
-   .wrap{ max-width:900px; margin:0 auto; padding:16px; }
-   header{ display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
-   a.btn, button.btn{
-     appearance:none; border:0; border-radius:10px; padding:10px 14px; font-weight:800; cursor:pointer;
-     background:#0ea5e9; color:#fff; text-decoration:none; display:inline-block;
-     box-shadow:0 2px 0 #0b6da0;
-   }
-   table{ width:100%; border-collapse:collapse; background:#0a1a24; border:1px solid #22485e; border-radius:10px; overflow:hidden;}
-   th, td{ padding:10px; border-bottom:1px solid #18384a; text-align:left; }
-   th{ background:#0d2d40; }
-   tr:last-child td{ border-bottom:0; }
-   .muted{ opacity:.8; }
+   :root{ --bg:#163f5b; --panel:#0c2230; --bar:#0d2d40; --text:#fff; --muted:#a7d8ef; }
+   html,body{ margin:0; padding:0; background:var(--bg); color:var(--text);
+     font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial; }
+   header{ display:flex; gap:12px; align-items:center; justify-content:space-between;
+     padding:10px 12px; background:var(--bar); border-bottom:1px solid rgba(255,255,255,.12); }
+   .btn{ appearance:none; border:1px solid #2b506a; background:#0d2d40; color:#c8f1ff;
+     padding:8px 12px; border-radius:10px; text-decoration:none; font-weight:700; }
+   main{ max-width:900px; margin:18px auto; padding:0 12px; }
+   .card{ background:var(--panel); border:1px solid rgba(255,255,255,0.1);
+     border-radius:14px; padding:12px; }
+   table{ width:100%; border-collapse:collapse; }
+   th,td{ padding:10px; border-bottom:1px solid rgba(255,255,255,0.08); text-align:left; }
+   th{ opacity:.9; font-weight:800; }
+   .muted{ color:var(--muted); font-size:14px; }
+   .footerRow td{ text-align:center; }
+   #loadMore{ margin-top:12px; width:100%; }
+   .hide{ display:none; }
  </style>
 </head>
 <body>
- <div class="wrap">
-   <header>
-     <h1 style="margin:0">Snake — Scoreboard</h1>
-     <div><a href="index.html" class="btn">Home</a></div>
-   </header>
+ <header>
+   <div><strong>Snake — Scoreboard</strong></div>
+   <a class="btn" href="index.html">Home</a>
+ </header>
 
-   <p class="muted">Showing top scores for <b>Snake</b>. Your name is saved in your browser and attached to your scores.</p>
+ <main>
+   <p class="muted">
+     Showing top scores for Snake. Your name is saved in your browser and attached to your scores.
+   </p>
 
-   <table id="table">
-     <thead><tr><th>#</th><th>Name</th><th>Score</th><th>Date</th></tr></thead>
-     <tbody id="rows"><tr><td colspan="4" class="muted">Loading…</td></tr></tbody>
-   </table>
- </div>
+   <div class="card">
+     <table>
+       <thead>
+         <tr><th>#</th><th>Name</th><th>Score</th><th>Date</th></tr>
+       </thead>
+       <tbody id="rows">
+         <tr><td colspan="4" class="muted">Loading…</td></tr>
+       </tbody>
+     </table>
+     <button id="loadMore" class="btn hide">Load more</button>
+   </div>
+ </main>
 
  <script type="module">
    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-app.js";
-   import { getFirestore, collection, query, where, orderBy, limit, getDocs } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-firestore.js";
+   import {
+     getFirestore, collection, query, where, orderBy, limit, getDocs, startAfter
+   } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-firestore.js";
 
-   /* SAME CONFIG AS index.html */
+   /* === SAME CONFIG AS index.html === */
    const firebaseConfig = {
      apiKey: "AIzaSyCB1IQNSy8pGFXgv9S1P4f0sTLyPxiUv9k",
      authDomain: "snake-web-b6745.firebaseapp.com",
@@ -48,41 +64,109 @@
      messagingSenderId: "242732126109",
      appId: "1:242732126109:web:1d44c9bf8371f238792974"
    };
-   const app = initializeApp(firebaseConfig);
-   const db  = getFirestore(app);
 
-   async function loadScores(){
-     const rows = document.getElementById('rows');
-     rows.innerHTML = `<tr><td colspan="4" class="muted">Loading…</td></tr>`;
+   /* ---------- DOM ---------- */
+   const rowsEl = document.getElementById('rows');
+   const loadMoreBtn = document.getElementById('loadMore');
+
+   /* ---------- Helpers ---------- */
+   const esc = s => String(s ?? "")
+     .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+
+   const fmt = ts => {
+     try { return ts?.toDate().toLocaleString() ?? "—"; }
+     catch { return "—"; }
+   };
+
+   /* ---------- Pagination State ---------- */
+   const PAGE_SIZE = 50;
+   let app, db;
+   let lastDoc = null;          // Firestore cursor
+   let rankOffset = 0;          // continue numbering across pages
+   let reachedEnd = false;      // no more docs
+
+   /* ---------- Query builder (composite index) ---------- */
+   const baseQuery = (cursor=null) => {
+     // Requires composite index: game ASC, score DESC, created_at DESC
+     const parts = [
+       collection(db, "scores"),
+       where("game","==","snake"),
+       orderBy("score","desc"),
+       orderBy("created_at","desc"),
+       limit(PAGE_SIZE)
+     ];
+     if (cursor) parts.push(startAfter(cursor));
+     return query(...parts);
+   };
+
+   /* ---------- Rendering ---------- */
+   function appendRows(docs){
+     // Remove "Loading…" if present
+     if (rowsEl.firstElementChild && rowsEl.firstElementChild.children[0]?.textContent?.includes("Loading")) {
+       rowsEl.innerHTML = "";
+     }
+     let html = "";
+     docs.forEach((doc, i) => {
+       const d = doc.data();
+       html += `<tr>
+         <td>${rankOffset + i + 1}</td>
+         <td>${esc(d.name || "(anon)")}</td>
+         <td>${d.score ?? 0}</td>
+         <td>${fmt(d.created_at)}</td>
+       </tr>`;
+     });
+     rowsEl.insertAdjacentHTML("beforeend", html);
+     rankOffset += docs.length;
+   }
+
+   /* ---------- Data loaders ---------- */
+   async function loadFirstPage(){
+     rowsEl.innerHTML = `<tr><td colspan="4" class="muted">Loading…</td></tr>`;
+     reachedEnd = false; lastDoc = null; rankOffset = 0;
      try{
-       const q = query(
-         collection(db,"scores"),
-         where("game","==","snake"),
-         orderBy("score","desc"),
-         limit(50)
-       );
-       const snap = await getDocs(q);
-       if(snap.empty){ rows.innerHTML = `<tr><td colspan="4" class="muted">No scores yet.</td></tr>`; return; }
+       app = initializeApp(firebaseConfig);
+       db  = getFirestore(app);
 
-       let i=0, html="";
-       snap.forEach(doc=>{
-         const d = doc.data();
-         const name = (d.name || "(anon)").toString().slice(0,20);
-         const score = d.score ?? 0;
-         const dt = d.created_at && d.created_at.toDate ? d.created_at.toDate() : null;
-         const dateStr = dt ? dt.toLocaleString() : "-";
-         html += `<tr><td>${++i}</td><td>${escapeHtml(name)}</td><td>${score}</td><td>${dateStr}</td></tr>`;
-       });
-       rows.innerHTML = html;
+       const snap = await getDocs(baseQuery());
+       if (snap.empty){
+         rowsEl.innerHTML = `<tr><td colspan="4" class="muted">No scores yet.</td></tr>`;
+         loadMoreBtn.classList.add("hide");
+         return;
+       }
+       appendRows(snap.docs);
+       lastDoc = snap.docs[snap.docs.length - 1];
+       // If fewer than PAGE_SIZE came back, we already hit the end
+       if (snap.size < PAGE_SIZE) { reachedEnd = true; loadMoreBtn.classList.add("hide"); }
+       else { loadMoreBtn.classList.remove("hide"); }
+
      }catch(e){
-       rows.innerHTML = `<tr><td colspan="4" class="muted">Failed to load scores.</td></tr>`;
        console.warn(e);
+       rowsEl.innerHTML = `<tr><td colspan="4" class="muted">Failed to load scores.</td></tr>`;
+       loadMoreBtn.classList.add("hide");
      }
    }
 
-   function escapeHtml(s){ return s.replace(/[&<>"']/g, m=>({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[m])) }
+   async function loadMore(){
+     if (reachedEnd || !lastDoc) return;
+     loadMoreBtn.disabled = true;
+     loadMoreBtn.textContent = "Loading…";
+     try{
+       const snap = await getDocs(baseQuery(lastDoc));
+       if (snap.empty){ reachedEnd = true; loadMoreBtn.classList.add("hide"); return; }
+       appendRows(snap.docs);
+       lastDoc = snap.docs[snap.docs.length - 1];
+       if (snap.size < PAGE_SIZE){ reachedEnd = true; loadMoreBtn.classList.add("hide"); }
+     }catch(e){
+       console.warn(e);
+     }finally{
+       loadMoreBtn.disabled = false;
+       loadMoreBtn.textContent = "Load more";
+     }
+   }
 
-   loadScores();
+   /* ---------- Init ---------- */
+   loadMoreBtn.addEventListener('click', loadMore);
+   loadFirstPage();
  </script>
 </body>
 </html>
