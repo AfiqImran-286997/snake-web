@@ -6,23 +6,28 @@
        content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
  <title>Snake — Scoreboard</title>
  <style>
-   :root{ --bg:#163f5b; --panel:#0c2230; --bar:#0d2d40; --text:#fff; --muted:#a7d8ef; }
+   :root{ --bg:#163f5b; --panel:#0c2230; --bar:#0d2d40; --text:#fff; --muted:#a7d8ef; --danger:#c53b3b; --dangerBorder:#8f2b2b; }
    html,body{ margin:0; padding:0; background:var(--bg); color:var(--text);
      font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial; }
    header{ display:flex; gap:12px; align-items:center; justify-content:space-between;
      padding:10px 12px; background:var(--bar); border-bottom:1px solid rgba(255,255,255,.12); }
    .btn{ appearance:none; border:1px solid #2b506a; background:#0d2d40; color:#c8f1ff;
-     padding:8px 12px; border-radius:10px; text-decoration:none; font-weight:700; }
-   main{ max-width:900px; margin:18px auto; padding:0 12px; }
+     padding:8px 12px; border-radius:10px; text-decoration:none; font-weight:700; cursor:pointer; }
+   .btn:disabled{ opacity:.6; cursor:not-allowed; }
+   .btn-danger{ background:var(--danger); border-color:var(--dangerBorder); color:#fff; }
+   main{ max-width:1000px; margin:18px auto; padding:0 12px; }
+   .toolbar{ display:flex; gap:10px; align-items:center; justify-content:space-between; margin:0 0 10px; flex-wrap:wrap; }
    .card{ background:var(--panel); border:1px solid rgba(255,255,255,0.1);
      border-radius:14px; padding:12px; }
    table{ width:100%; border-collapse:collapse; }
    th,td{ padding:10px; border-bottom:1px solid rgba(255,255,255,0.08); text-align:left; }
    th{ opacity:.9; font-weight:800; }
    .muted{ color:var(--muted); font-size:14px; }
-   .footerRow td{ text-align:center; }
    #loadMore{ margin-top:12px; width:100%; }
    .hide{ display:none; }
+   .leftGroup{ display:flex; gap:10px; align-items:center; }
+   .rightGroup{ display:flex; gap:10px; align-items:center; }
+   .dangerNote{ color:#ffc9c9; font-size:12px; opacity:.9; }
  </style>
 </head>
 <body>
@@ -32,27 +37,43 @@
  </header>
 
  <main>
-   <p class="muted">
-     Showing top scores for Snake. Your name is saved in your browser and attached to your scores.
-   </p>
+   <div class="toolbar">
+     <div class="leftGroup">
+       <span class="muted">Showing top scores for Snake. Your name is saved in your browser and attached to your scores.</span>
+     </div>
+     <div class="rightGroup">
+       <button id="deleteSelected" class="btn btn-danger">Delete selected</button>
+       <button id="deleteAll" class="btn btn-danger">Delete ALL</button>
+     </div>
+   </div>
 
    <div class="card">
      <table>
        <thead>
-         <tr><th>#</th><th>Name</th><th>Score</th><th>Date</th></tr>
+         <tr>
+           <th><input type="checkbox" id="selectAll"></th>
+           <th>#</th>
+           <th>Name</th>
+           <th>Score</th>
+           <th>Date</th>
+         </tr>
        </thead>
        <tbody id="rows">
-         <tr><td colspan="4" class="muted">Loading…</td></tr>
+         <tr><td colspan="5" class="muted">Loading…</td></tr>
        </tbody>
      </table>
      <button id="loadMore" class="btn hide">Load more</button>
+     <div class="dangerNote" style="margin-top:8px;">
+       Admin actions require password. For production, move deletes to a server/Cloud Function.
+     </div>
    </div>
  </main>
 
  <script type="module">
    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-app.js";
    import {
-     getFirestore, collection, query, where, orderBy, limit, getDocs, startAfter
+     getFirestore, collection, query, where, orderBy, limit, getDocs, startAfter,
+     writeBatch, doc, deleteDoc
    } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-firestore.js";
 
    /* === SAME CONFIG AS index.html === */
@@ -68,15 +89,19 @@
    /* ---------- DOM ---------- */
    const rowsEl = document.getElementById('rows');
    const loadMoreBtn = document.getElementById('loadMore');
+   const selectAllEl = document.getElementById('selectAll');
+   const btnDeleteSelected = document.getElementById('deleteSelected');
+   const btnDeleteAll = document.getElementById('deleteAll');
 
    /* ---------- Helpers ---------- */
    const esc = s => String(s ?? "")
      .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+   const fmt = ts => { try { return ts?.toDate().toLocaleString() ?? "—"; } catch { return "—"; } };
 
-   const fmt = ts => {
-     try { return ts?.toDate().toLocaleString() ?? "—"; }
-     catch { return "—"; }
-   };
+   function askPassword(){
+     const p = prompt("Enter admin password to proceed:");
+     return p === "LSSIsTheBest";
+   }
 
    /* ---------- Pagination State ---------- */
    const PAGE_SIZE = 50;
@@ -85,9 +110,8 @@
    let rankOffset = 0;          // continue numbering across pages
    let reachedEnd = false;      // no more docs
 
-   /* ---------- Query builder (composite index) ---------- */
+   /* ---------- Query builder (requires composite index) ---------- */
    const baseQuery = (cursor=null) => {
-     // Requires composite index: game ASC, score DESC, created_at DESC
      const parts = [
        collection(db, "scores"),
        where("game","==","snake"),
@@ -101,14 +125,15 @@
 
    /* ---------- Rendering ---------- */
    function appendRows(docs){
-     // Remove "Loading…" if present
      if (rowsEl.firstElementChild && rowsEl.firstElementChild.children[0]?.textContent?.includes("Loading")) {
        rowsEl.innerHTML = "";
      }
      let html = "";
-     docs.forEach((doc, i) => {
-       const d = doc.data();
-       html += `<tr>
+     docs.forEach((dSnap, i) => {
+       const d = dSnap.data();
+       const id = dSnap.id;
+       html += `<tr data-id="${id}">
+         <td><input type="checkbox" class="rowCheck"></td>
          <td>${rankOffset + i + 1}</td>
          <td>${esc(d.name || "(anon)")}</td>
          <td>${d.score ?? 0}</td>
@@ -119,9 +144,15 @@
      rankOffset += docs.length;
    }
 
+   function currentCheckedIds(){
+     return Array.from(rowsEl.querySelectorAll('.rowCheck:checked'))
+       .map(cb => cb.closest('tr')?.getAttribute('data-id'))
+       .filter(Boolean);
+   }
+
    /* ---------- Data loaders ---------- */
    async function loadFirstPage(){
-     rowsEl.innerHTML = `<tr><td colspan="4" class="muted">Loading…</td></tr>`;
+     rowsEl.innerHTML = `<tr><td colspan="5" class="muted">Loading…</td></tr>`;
      reachedEnd = false; lastDoc = null; rankOffset = 0;
      try{
        app = initializeApp(firebaseConfig);
@@ -129,19 +160,17 @@
 
        const snap = await getDocs(baseQuery());
        if (snap.empty){
-         rowsEl.innerHTML = `<tr><td colspan="4" class="muted">No scores yet.</td></tr>`;
+         rowsEl.innerHTML = `<tr><td colspan="5" class="muted">No scores yet.</td></tr>`;
          loadMoreBtn.classList.add("hide");
          return;
        }
        appendRows(snap.docs);
        lastDoc = snap.docs[snap.docs.length - 1];
-       // If fewer than PAGE_SIZE came back, we already hit the end
        if (snap.size < PAGE_SIZE) { reachedEnd = true; loadMoreBtn.classList.add("hide"); }
        else { loadMoreBtn.classList.remove("hide"); }
-
      }catch(e){
        console.warn(e);
-       rowsEl.innerHTML = `<tr><td colspan="4" class="muted">Failed to load scores.</td></tr>`;
+       rowsEl.innerHTML = `<tr><td colspan="5" class="muted">Failed to load scores.</td></tr>`;
        loadMoreBtn.classList.add("hide");
      }
    }
@@ -164,8 +193,95 @@
      }
    }
 
-   /* ---------- Init ---------- */
+   /* ---------- Deletions ---------- */
+   async function deleteSelected(){
+     const ids = currentCheckedIds();
+     if (!ids.length){ alert("No rows selected."); return; }
+     if (!askPassword()) { alert("Wrong password."); return; }
+     if (!confirm(`Delete ${ids.length} selected score(s)? This cannot be undone.`)) return;
+
+     btnDeleteSelected.disabled = true;
+     try{
+       const b = writeBatch(db);
+       ids.forEach(id => b.delete(doc(db, "scores", id)));
+       await b.commit();
+       // remove rows from UI
+       ids.forEach(id => {
+         const tr = rowsEl.querySelector(`tr[data-id="${id}"]`);
+         if (tr) tr.remove();
+       });
+       alert("Selected scores deleted.");
+     }catch(e){
+       console.warn(e);
+       alert("Failed to delete selected scores.");
+     }finally{
+       btnDeleteSelected.disabled = false;
+     }
+   }
+
+   async function deleteAll(){
+     if (!askPassword()) { alert("Wrong password."); return; }
+     if (!confirm("Delete ALL Snake scores? This cannot be undone.")) return;
+
+     btnDeleteAll.disabled = true;
+     btnDeleteAll.textContent = "Deleting…";
+
+     try{
+       let cursor = null;
+       let total = 0;
+       while(true){
+         const pageQuery = query(
+           collection(db,"scores"),
+           where("game","==","snake"),
+           orderBy("score","desc"),
+           orderBy("created_at","desc"),
+           limit(500),
+           ...(cursor ? [startAfter(cursor)] : [])
+         );
+         const snap = await getDocs(pageQuery);
+         if (snap.empty) break;
+
+         const b = writeBatch(db);
+         snap.docs.forEach(d => b.delete(d.ref));
+         await b.commit();
+
+         total += snap.size;
+         cursor = snap.docs[snap.docs.length - 1];
+         if (snap.size < 500) break;
+       }
+       // refresh UI
+       rowsEl.innerHTML = `<tr><td colspan="5" class="muted">All scores deleted (${total}). Reloading…</td></tr>`;
+       rankOffset = 0; reachedEnd = true; loadMoreBtn.classList.add("hide");
+     }catch(e){
+       console.warn(e);
+       alert("Failed to delete all scores.");
+     }finally{
+       btnDeleteAll.disabled = false;
+       btnDeleteAll.textContent = "Delete ALL";
+       // Reload first page so table reflects empty state
+       await loadFirstPage();
+     }
+   }
+
+   /* ---------- Events ---------- */
    loadMoreBtn.addEventListener('click', loadMore);
+   btnDeleteSelected.addEventListener('click', deleteSelected);
+   btnDeleteAll.addEventListener('click', deleteAll);
+   selectAllEl.addEventListener('change', (e)=>{
+     const on = e.target.checked;
+     rowsEl.querySelectorAll('.rowCheck').forEach(cb => cb.checked = on);
+   });
+
+   // If new rows are added after clicking "select all", keep header checkbox in sync
+   rowsEl.addEventListener('change', (e)=>{
+     if (e.target.classList.contains('rowCheck')){
+       const cbs = Array.from(rowsEl.querySelectorAll('.rowCheck'));
+       const all = cbs.length && cbs.every(cb => cb.checked);
+       selectAllEl.checked = all;
+     }
+   });
+
+   /* ---------- Init ---------- */
    loadFirstPage();
  </script>
 </body>
