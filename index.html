@@ -2,167 +2,430 @@
 <html lang="en">
 <head>
  <meta charset="UTF-8" />
- <meta
-   name="viewport"
-   content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
- />
- <title>Snake — Web</title>
-
- <!-- Pyodide (runs main.py in the browser) -->
- <script src="https://cdn.jsdelivr.net/pyodide/v0.23.4/full/pyodide.js"></script>
-
- <!-- Firebase v10 (ESM) -->
- <script type="module">
-   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-app.js";
-   import {
-     getFirestore, doc, setDoc, serverTimestamp
-   } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-firestore.js";
-
-   // 🔧 PUT YOUR OWN CONFIG HERE (same one you already use)
-const firebaseConfig = {
-  apiKey: "AIzaSyCB1IQNSy8pGFXgv9S1P4f0sTLyPxiUv9k",
-  authDomain: "snake-web-b6745.firebaseapp.com",
-  projectId: "snake-web-b6745",
-  storageBucket: "snake-web-b6745.firebasestorage.app",
-  messagingSenderId: "242732126109",
-  appId: "1:242732126109:web:1d44c9bf8371f238792974"
-};
-
-   // Safe init (prevents “app already exists” on reloads)
-   const app = (globalThis.firebase_app)
-     ? globalThis.firebase_app
-     : (globalThis.firebase_app = initializeApp(firebaseConfig));
-
-   // Expose minimal Firestore helpers to Python (Pyodide sees them on `js`)
-   if (!globalThis.firebase_firestore) {
-     globalThis.firebase_firestore = { getFirestore, doc, setDoc, serverTimestamp };
-   }
-   if (!globalThis._snake_db) {
-     globalThis._snake_db = getFirestore(app);
-   }
- </script>
-
+ <meta name="viewport"
+       content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+ <title>Snake — Mobile Web + Firebase (Home + Name + D-pad)</title>
  <style>
-   :root { --panel: #245b74; --ink: #e8f6ff; --pop: #ffef84; }
-   * { box-sizing: border-box; }
+   :root{
+     --bg:#163f5b; --board:#327aa8; --snake:#00ff00; --food:#d53250;
+     --poison:#a020f0; --gold:#ffd700; --ob:#a9a9a9; --text:#ffffff; --accent:#0d2d40;
+     --safe-bottom: env(safe-area-inset-bottom, 0px);
+   }
+   html,body{
+     margin:0; padding:0; height:100dvh; overflow:hidden;
+     background:var(--bg); color:var(--text);
+     font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial;
+     touch-action:none; -webkit-user-select:none; user-select:none;
+   }
+   .wrap{
+     height:100dvh;
+     display:grid;
+     grid-template-rows:auto 1fr auto; /* header, game, controls */
+     justify-items:center; gap:6px;
+   }
+   header{
+     width:100%; max-width:900px; padding:6px 10px; box-sizing:border-box;
+     background:var(--accent); border-bottom:1px solid rgba(255,255,255,0.12);
+     border-radius:0 0 12px 12px; display:flex; align-items:center; justify-content:space-between;
+   }
+   #hud{ display:flex; gap:12px; font-weight:700; align-items:center;}
+   #playerTag{ opacity:.85; font-weight:600; }
+   #changeName{ color:#9ae6ff; text-decoration:underline; cursor:pointer; font-size:13px; margin-left:6px;}
+   #restartBtn{
+     appearance:none; border:0; cursor:pointer; padding:8px 12px; border-radius:10px;
+     background:#22c55e; color:#052e14; font-weight:800; box-shadow:0 2px 0 #138a3d;
+   }
+   main{ width:100%; display:grid; place-items:center; position:relative; }
+   #board{ image-rendering:pixelated; border-radius:8px; box-shadow:0 8px 24px rgba(0,0,0,0.35); }
 
-   body {
-     margin: 0; background:#12313f; color: var(--ink);
-     font-family: system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, Noto Sans, "Apple Color Emoji", "Segoe UI Emoji";
-     height: 100dvh; display: grid; place-items: center;
+   /* D-pad area */
+   .pad{
+     width:100%; max-width:900px;
+     padding: 6px 10px calc(6px + var(--safe-bottom));
+     box-sizing:border-box; display:grid; place-items:center;
    }
+   .dpad{
+     width: clamp(180px, 46vw, 280px);
+     aspect-ratio:1/1;
+     display:grid;
+     grid-template-columns: 1fr 1fr 1fr;
+     grid-template-rows: 1fr 1fr 1fr;
+     gap: 10px;
+   }
+   .btn{
+     border:0; border-radius:14px; background:#0ea5e9; color:#fff; font-weight:900;
+     font-size: clamp(18px, 5vw, 26px); display:grid; place-items:center;
+     box-shadow:0 6px 0 #0b6da0; touch-action:manipulation; cursor:pointer;
+   }
+   .btn:active{ transform: translateY(2px); }
+   #btnUp   { grid-column:2; grid-row:1; }
+   #btnLeft { grid-column:1; grid-row:2; }
+   #btnRight{ grid-column:3; grid-row:2; }
+   #btnDown { grid-column:2; grid-row:3; }
 
-   .wrapper {
-     width: min(92vw, 720px);
-     display: grid; gap: 10px;
-     grid-template-rows: auto auto 1fr auto;
-     align-items: center;
+   /* Overlay (Home, Name, Game Over) */
+   #overlay{
+     position:fixed; inset:0; z-index:10; display:none; align-items:center; justify-content:center;
+     background:rgba(0,0,0,0.6); padding:16px;
    }
+   .card{
+     background:#0c2230; border:1px solid rgba(255,255,255,0.1); border-radius:16px; padding:16px;
+     width:min(520px, calc(100% - 24px)); text-align:center; box-shadow:0 10px 30px rgba(0,0,0,0.4);
+   }
+   .card h1{ margin:0 0 10px; font-size:24px; }
+   .row{ display:flex; gap:10px; justify-content:center; margin-top:10px; flex-wrap:wrap;}
+   .ghost{ opacity:0.8; font-size:14px; }
 
-   /* Top HUD row (left: score/time/player from game canvas; right: speed text) */
-   .hud {
-     display:flex; align-items:center; justify-content:space-between;
-     padding: 6px 10px; background: rgba(0,0,0,.2); border-radius: 8px;
+   .text{
+     width:100%; box-sizing:border-box; padding:10px 12px; border-radius:10px; border:1px solid #23465f;
+     background:#0a1a24; color:#fff; outline:none; font-size:16px;
    }
-   #hud-speed { font-weight: 700; }
+   .cta{
+     appearance:none; border:0; cursor:pointer; padding:10px 14px; border-radius:10px;
+     background:#22c55e; color:#052e14; font-weight:800; box-shadow:0 2px 0 #138a3d;
+   }
+   .ghostBtn{
+     appearance:none; border:1px solid #2b506a; cursor:pointer; padding:10px 14px; border-radius:10px;
+     background:#0d2d40; color:#c8f1ff; font-weight:700;
+   }
+   a.ghostBtn{ text-decoration:none; display:inline-block; }
 
-   /* Canvas container (your pygame canvas will appear inside automatically) */
-   .stage {
-     position: relative; background: #1f5269;
-     padding: 8px; border-radius: 10px; display:grid; place-items:center;
-     min-height: 420px;
+   /* Speed toast (non-intrusive, top-center over the canvas) */
+   #speedToast{
+     position:absolute; top:6px; left:0; right:0; display:grid; place-items:center;
+     pointer-events:none; opacity:0; transition:opacity .15s ease;
+     font-weight:800; font-size:18px;
    }
-
-   /* “Speed Up!” popup overlay */
-   #speed-popup {
-     position: absolute; inset: 0; display: grid; place-items:center;
-     pointer-events:none; opacity:0; transition: opacity .2s ease;
+   #speedToast.show{ opacity:1; }
+   #speedToast .bubble{
+     padding:6px 10px; border-radius:10px; background:rgba(0,0,0,.55); border:2px solid #ffef84; color:#ffef84;
+     text-shadow:0 1px 0 rgba(0,0,0,.35);
    }
-   #speed-popup.show { opacity: 1; }
-   #speed-popup .bubble {
-     padding: 10px 16px; border-radius: 10px;
-     background: rgba(0,0,0,.55);
-     border: 2px solid var(--pop);
-     font-size: 24px; font-weight: 800; color: var(--pop);
-     text-shadow: 0 2px 0 rgba(0,0,0,.35);
-   }
-
-   /* Controls row (simple D-pad; fires keyboard events) */
-   .controls {
-     display:flex; justify-content:center; gap:10px; margin-top: 2px;
-   }
-   .btn {
-     border:0; padding:14px 16px; border-radius:12px;
-     background:#2aa4d6; color:white; font-size:20px; font-weight:700;
-     box-shadow: inset 0 -2px 0 rgba(0,0,0,.2);
-     touch-action: manipulation; user-select:none;
-   }
-   .btn:active { transform: translateY(1px); }
-
-   .topbar {
-     display:flex; gap:8px; justify-content:flex-end;
-   }
-   .small { font-size: 12px; opacity: .75; }
  </style>
 </head>
 <body>
- <div class="wrapper">
-   <!-- top bar -->
-   <div class="topbar">
-     <button class="btn" onclick="location.href='scoreboard.html'">Scoreboard</button>
-     <button class="btn" onclick="location.reload()">Restart</button>
-   </div>
+ <div class="wrap">
+   <header>
+     <div id="hud">
+       <span id="score">Score: 0</span>
+       <span id="time">Time: 60</span>
+       <!-- NEW: speed indicator (keeps UI style) -->
+       <span id="speed">Speed: ×1.0</span>
+       <span id="playerTag"></span><span id="changeName" hidden>change</span>
+     </div>
+     <button id="restartBtn" aria-label="Restart">Restart</button>
+   </header>
 
-   <!-- HUD row -->
-   <div class="hud">
-     <div class="small">Tip: get 5 points to speed up!</div>
-     <div id="hud-speed">Speed ×1.0</div>
-   </div>
+   <main>
+     <canvas id="board" width="300" height="400"></canvas>
+     <!-- NEW: speed-up toast -->
+     <div id="speedToast"><div class="bubble">Speed Up! ×1.0</div></div>
+   </main>
 
-   <!-- stage / canvas host -->
-   <div class="stage">
-     <!-- PyGame (Pyodide) will insert the <canvas> here automatically -->
-     <div id="speed-popup"><div class="bubble">Speed Up! ×1.0</div></div>
-   </div>
-
-   <!-- Controls -->
-   <div class="controls">
-     <button class="btn" onclick="sendKey('ArrowLeft')">◀</button>
-     <button class="btn" onclick="sendKey('ArrowUp')">▲</button>
-     <button class="btn" onclick="sendKey('ArrowDown')">▼</button>
-     <button class="btn" onclick="sendKey('ArrowRight')">▶</button>
+   <!-- D-pad -->
+   <div class="pad" aria-label="On-screen controller">
+     <div class="dpad">
+       <button id="btnUp" class="btn"    aria-label="Up">▲</button>
+       <button id="btnLeft" class="btn"  aria-label="Left">◀</button>
+       <button id="btnRight" class="btn" aria-label="Right">▶</button>
+       <button id="btnDown" class="btn"  aria-label="Down">▼</button>
+     </div>
    </div>
  </div>
 
- <script>
-   // Dispatch virtual key events so pygame can read them
-   function sendKey(key) {
-     window.dispatchEvent(new KeyboardEvent('keydown', { key }));
-   }
- </script>
+ <!-- Overlay -->
+ <div id="overlay"><div class="card" id="overlayCard"></div></div>
 
- <!-- Boot Pyodide and run main.py -->
- <script>
-   async function boot() {
-     const pyodide = await loadPyodide();
-     // make DOM helpers visible to Python
-     globalThis._snake_set_speed_text = (txt) => {
-       const el = document.getElementById('hud-speed');
-       if (el) el.textContent = txt;
-     };
-     globalThis._snake_show_speed_popup = (txt, show) => {
-       const cont = document.getElementById('speed-popup');
-       const bubble = cont?.querySelector('.bubble');
-       if (!cont || !bubble) return;
-       bubble.textContent = `Speed Up! ${txt}`;
-       cont.classList.toggle('show', !!show);
-     };
+ <!-- Firebase + Game (unchanged foundation) -->
+ <script type="module">
+   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-app.js";
+   import { getFirestore, collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-firestore.js";
 
-     const code = await (await fetch("main.py")).text();
-     // Run python (async because pygame loop yields on time.sleep)
-     await pyodide.runPythonAsync(code);
+   /* ===== YOUR FIREBASE CONFIG (same) ===== */
+   const firebaseConfig = {
+     apiKey: "AIzaSyCB1IQNSy8pGFXgv9S1P4f0sTLyPxiUv9k",
+     authDomain: "snake-web-b6745.firebaseapp.com",
+     projectId: "snake-web-b6745",
+     storageBucket: "snake-web-b6745.firebasestorage.app",
+     messagingSenderId: "242732126109",
+     appId: "1:242732126109:web:1d44c9bf8371f238792974"
+   };
+
+   let db=null;
+   try{ const app = initializeApp(firebaseConfig); db = getFirestore(app); }
+   catch(e){ console.warn("Firebase not configured; scores won't be saved.", e); }
+
+   /* ---------- Overlay helpers ---------- */
+   const overlay = document.getElementById('overlay');
+   const card = document.getElementById('overlayCard');
+   function openOverlay(html){ card.innerHTML = html; overlay.style.display="flex"; }
+   function closeOverlay(){ overlay.style.display="none"; }
+
+   /* ---------- Name storage & screens ---------- */
+   const LS_KEY = "snake_player_name";
+   const getName = () => (localStorage.getItem(LS_KEY) || "").trim();
+   const saveName = n => { localStorage.setItem(LS_KEY, n.trim()); showPlayerTag(); };
+
+   function showPlayerTag(){
+     const n = getName();
+     const t = document.getElementById('playerTag');
+     const c = document.getElementById('changeName');
+     if(n){ t.textContent = "Player: " + n; c.hidden = false; }
+     else { t.textContent = "Player: (not set)"; c.hidden = true; }
    }
-   boot();
+
+   function showNamePrompt(next="home"){
+     openOverlay(`
+       <h1>Welcome!</h1>
+       <p>Please enter your player name.</p>
+       <input id="nameInput" class="text" maxlength="20" placeholder="e.g., Afiq" />
+       <div class="row"><button id="saveNameBtn" class="cta">Save</button></div>
+     `);
+     document.getElementById('saveNameBtn').onclick = () => {
+       const v = String(document.getElementById('nameInput').value||"").trim();
+       if(v.length < 2){ alert("Name must be at least 2 characters."); return; }
+       saveName(v);
+       if(next==="play"){ reset(); closeOverlay(); startGame(); }
+       else { showHome(); }
+     };
+     document.getElementById('nameInput').focus();
+   }
+function showHome(){
+     const n = getName();
+     openOverlay(`
+       <h1>Snake</h1>
+       <p class="ghost">${n ? `Welcome, <b>${n}</b>!` : "Set your name so we can record scores."}</p>
+       <div class="row">
+         <button id="playBtn" class="cta">Play</button>
+         <a class="ghostBtn" href="scoreboard.html">Scoreboard</a>
+         <button id="setNameBtn" class="ghostBtn">${n?"Change name":"Set name"}</button>
+       </div>
+     `);
+     document.getElementById('playBtn').onclick = () => {
+       if(!getName()){ showNamePrompt("play"); return; }
+       reset(); closeOverlay(); startGame();
+     };
+     document.getElementById('setNameBtn').onclick = () => showNamePrompt("home");
+   }
+
+   document.getElementById('changeName').onclick = () => showNamePrompt("home");
+
+   /* ---------- Game ---------- */
+   const canvas = document.getElementById('board');
+   const ctx = canvas.getContext('2d');
+   const scoreEl = document.getElementById('score');
+   const timeEl  = document.getElementById('time');
+   const speedEl = document.getElementById('speed'); // NEW
+
+   const btnUp = document.getElementById('btnUp');
+   const btnDown = document.getElementById('btnDown');
+   const btnLeft = document.getElementById('btnLeft');
+   const btnRight = document.getElementById('btnRight');
+   const restartBtn = document.getElementById('restartBtn');
+
+   const CELL = 10;
+   let COLS = canvas.width / CELL;
+   let ROWS = canvas.height / CELL;
+
+   const COL = { bg:"#327aa8", snake:"#00ff00", food:"#d53250", poison:"#a020f0", gold:"#ffd700", ob:"#a9a9a9" };
+
+   const BASE_HZ = 15;                  // base tick rate
+   const ROUND_LIMIT=60;
+   const POISON_VISIBLE_SECS=3.0, POISON_HIDDEN_SECS=1.0, GOLDEN_LIFE=5.0;
+
+   let running=false, roundStart=null, lastTick=0, acc=0;
+   let snake, snakeLen, dir, nextDir, score, food, poison, poisonStart, golden, goldenStart, obstacles;
+
+   // NEW: speed milestone state (never decreases)
+   let peakScore = 0;           // highest score reached this round
+   let speedMult = 1;           // 1 + floor(peakScore/5)
+   const speedToast = document.getElementById('speedToast');
+
+   const same=(a,b)=>a.x===b.x&&a.y===b.y;
+   const randCell=()=>({x:Math.floor(Math.random()*COLS)*CELL, y:Math.floor(Math.random()*ROWS)*CELL});
+
+   function generateSafeObstacle(){
+     const blocked=new Set();
+     snake.forEach(s=>blocked.add(`${s.x},${s.y}`));
+     blocked.add(`${food.x},${food.y}`);
+     if(golden) blocked.add(`${golden.x},${golden.y}`);
+     poison.forEach(p=>blocked.add(`${p.x},${p.y}`));
+     while(true){ const c=randCell(); if(!blocked.has(`${c.x},${c.y}`)) return c; }
+   }
+
+   function setSpeed(mult){
+     speedMult = mult;
+     speedEl.textContent = `Speed: ×${mult.toFixed(1)}`;
+     // toast for 2s
+     speedToast.querySelector('.bubble').textContent = `Speed Up! ×${mult.toFixed(1)}`;
+     speedToast.classList.add('show');
+     setTimeout(()=>speedToast.classList.remove('show'), 2000);
+   }
+
+   function maybeUpdateSpeed(){
+     const target = 1 + Math.floor(peakScore / 5);
+     if (target > speedMult) setSpeed(target);
+   }
+
+   function reset(){
+     running=false; roundStart=null; lastTick=0; acc=0;
+     const cx=Math.floor(COLS/2)*CELL, cy=Math.floor(ROWS/2)*CELL;
+     snake=[{x:cx,y:cy}]; snakeLen=1; dir={x:0,y:0}; nextDir={x:0,y:0}; score=0;
+     food=randCell(); poison=[randCell(),randCell(),randCell(),randCell()]; poisonStart=performance.now();
+     golden=null; goldenStart=null; obstacles=[];
+     scoreEl.textContent="Score: 0"; timeEl.textContent="Time: 60";
+     peakScore = 0; setSpeed(1); // NEW
+     drawAll();
+   }
+
+   function resizeCanvas(){
+     const headerH=document.querySelector('header').offsetHeight;
+     const padH=document.querySelector('.pad').offsetHeight;
+     const vw=window.innerWidth, vh=window.innerHeight;
+     const margin=14;
+     const availableH=Math.max(140, vh-headerH-padH-margin);
+     const availableW=Math.max(140, vw-20);
+     let w=Math.min(availableW, availableH*3/4), h=w*4/3;
+     w=Math.floor(w/CELL)*CELL; h=Math.floor(h/CELL)*CELL;
+     canvas.style.width=w+"px"; canvas.style.height=h+"px"; canvas.width=w; canvas.height=h;
+     COLS=w/CELL; ROWS=h/CELL;
+     if (Array.isArray(snake) && snake.length) drawAll();
+   }
+   window.addEventListener('resize', resizeCanvas);
+
+   function drawCell(c,color){ ctx.fillStyle=color; ctx.fillRect(c.x,c.y,CELL,CELL); }
+   function drawAll(){
+     ctx.fillStyle=COL.bg; ctx.fillRect(0,0,canvas.width,canvas.height);
+     if(!snake) return;
+     drawCell(food, COL.food);
+     const now=performance.now();
+     const t=(now-poisonStart)/1000, cycle=POISON_VISIBLE_SECS+POISON_HIDDEN_SECS, phase=t%cycle;
+     const showPoison=phase<=POISON_VISIBLE_SECS;
+     if(showPoison){ poison.forEach(p=>drawCell(p, COL.poison)); }
+     else if(phase<0.05){ poison=[randCell(),randCell(),randCell(),randCell()]; }
+     if(golden){ drawCell(golden, COL.gold); if((now-goldenStart)/1000>GOLDEN_LIFE) golden=null; }
+     obstacles.forEach(o=>drawCell(o, COL.ob));
+     snake.forEach(s=>drawCell(s, COL.snake));
+   }
+
+   function tick(){
+     if(!roundStart && (nextDir.x||nextDir.y)) roundStart=performance.now();
+
+     if(snake.length<2 ||
+        (snake[snake.length-1].x+nextDir.x!==snake[snake.length-2].x ||
+         snake[snake.length-1].y+nextDir.y!==snake[snake.length-2].y)){
+       dir={...nextDir};
+     }
+
+     const head=snake[snake.length-1];
+     const nx=head.x+dir.x, ny=head.y+dir.y, newHead={x:nx,y:ny};
+     if(nx<0||nx>=canvas.width||ny<0||ny>=canvas.height){ endRound(); return; }
+
+     snake.push(newHead); while(snake.length>snakeLen) snake.shift();
+     for(let i=0;i<snake.length-1;i++){ if(same(snake[i],newHead)){ endRound(); return; } }
+     for(const o of obstacles){ if(same(o,newHead)){ endRound(); return; } }
+
+     if(!golden && Math.random()<=0.03){ golden=randCell(); goldenStart=performance.now(); }
+
+     if(same(newHead,food)){
+       food=randCell(); snakeLen+=1; score+=1; scoreEl.textContent="Score: "+score;
+       obstacles.push(generateSafeObstacle());
+       if (score > peakScore){ peakScore = score; maybeUpdateSpeed(); } // NEW
+     }
+
+     const now=performance.now();
+     const t=(now-poisonStart)/1000, cycle=POISON_VISIBLE_SECS+POISON_HIDDEN_SECS, phase=t%cycle;
+     const showPoison=phase<=POISON_VISIBLE_SECS;
+     if(showPoison){
+       for(let i=poison.length-1;i>=0;i--){
+         if(same(poison[i],newHead)){ poison.splice(i,1); score=Math.max(0,score-2); scoreEl.textContent="Score: "+score; }
+       }
+     }
+
+     if(golden && same(golden,newHead)){
+       score+=5; snakeLen+=5; scoreEl.textContent="Score: "+score;
+       for(let i=0;i<5;i++) obstacles.push(generateSafeObstacle());
+       golden=null;
+       if (score > peakScore){ peakScore = score; maybeUpdateSpeed(); } // NEW
+     }
+
+     if(roundStart){
+       const elapsed=(performance.now()-roundStart)/1000;
+       const remain=Math.max(0, 60 - Math.floor(elapsed));
+       timeEl.textContent="Time: "+remain;
+       if(elapsed>=60){ endRound(); return; }
+     }
+
+     drawAll();
+   }
+
+   function loop(ts){
+     if(!running) return;
+     if(!lastTick) lastTick=ts;
+     const dt=ts-lastTick; lastTick=ts; acc+=dt;
+
+     // NEW: dynamic step based on speed multiplier (BASE_HZ * speedMult)
+     const stepMs = 1000 / (BASE_HZ * speedMult);
+
+     while(acc >= stepMs){
+       tick(); acc -= stepMs;
+       if(!running) return;
+     }
+     requestAnimationFrame(loop);
+   }
+
+   async function endRound(){
+     running=false; drawAll();
+     const n = getName() || "(anon)";
+     openOverlay(`
+       <h1>Game Over</h1>
+       <p>Your Score: <b>${score}</b></p>
+       <div class="row">
+         <button id="againBtn" class="cta">Play again</button>
+         <a class="ghostBtn" href="scoreboard.html">Scoreboard</a>
+         <button id="homeBtn" class="ghostBtn">Home</button>
+       </div>
+     `);
+     document.getElementById('againBtn').onclick = ()=>{ reset(); closeOverlay(); startGame(); };
+     document.getElementById('homeBtn').onclick  = ()=>{ showHome(); };
+
+     if(db){
+       try{
+         await addDoc(collection(db,"scores"), {
+           game:"snake", name:n, score, created_at: serverTimestamp()
+         });
+       }catch(e){ console.warn("Failed to save score:", e); }
+     }
+   }
+
+   function setDir(x,y){ nextDir={x,y}; }
+   const map = [
+     [btnUp,    () => setDir(0,-CELL)],
+     [btnDown,  () => setDir(0, CELL)],
+     [btnLeft,  () => setDir(-CELL,0)],
+     [btnRight, () => setDir( CELL,0)],
+   ];
+   for(const [el,fn] of map){
+     el.addEventListener('touchstart', e=>{ e.preventDefault(); fn(); }, {passive:false});
+     el.addEventListener('mousedown',   e=>{ e.preventDefault(); fn(); });
+   }
+   window.addEventListener('keydown', e=>{
+     switch(e.key){
+       case "ArrowUp": case "w": case "W": setDir(0,-CELL); break;
+       case "ArrowDown": case "s": case "S": setDir(0, CELL); break;
+       case "ArrowLeft": case "a": case "A": setDir(-CELL,0); break;
+       case "ArrowRight": case "d": case "D": setDir( CELL,0); break;
+     }
+   });
+
+   function startGame(){ closeOverlay(); running=true; lastTick=0; acc=0; requestAnimationFrame(loop); }
+   document.getElementById('restartBtn').addEventListener('click', ()=>{ reset(); startGame(); });
+
+   /* ---- INIT ORDER (same) ---- */
+   showPlayerTag();          // 1) HUD name
+   reset();                  // 2) create game state BEFORE any drawing
+   resizeCanvas();           // 3) fit to device (will redraw safely)
+   if(getName()){ showHome(); } else { showNamePrompt("home"); } // 4) show Name or Menu first
  </script>
 </body>
 </html>
