@@ -1,141 +1,224 @@
-import pygame, time, random
-import js
-from js import firebase_app, firebase_firestore, _snake_db
+import pygame
+import time
+import random
+import sys
 
 pygame.init()
 
-# Colors
-WHITE=(255,255,255); YELLOW=(255,255,102); BLACK=(0,0,0); RED=(213,50,80); GREEN=(0,255,0); BLUE=(50,153,213)
-
-# Display
-DIS_W, DIS_H = 360, 480   # taller so the playfield fits nicely
-screen = pygame.display.set_mode((DIS_W, DIS_H))
-pygame.display.set_caption("Snake — Web")
-
-clock = pygame.time.Clock()
+WIDTH, HEIGHT = 600, 480
 CELL = 10
-BASE_SLEEP = 0.15  # base delay (seconds) — will be divided by multiplier
-MIN_SLEEP  = 0.02  # cap (faster than this is too crazy)
+BASE_SPEED_HZ = 15  # base fps; will scale by multiplier
 
-font_small  = pygame.font.SysFont(None, 22)
-font_medium = pygame.font.SysFont(None, 28)
+BLACK = (0, 0, 0)
+WHITE = (255, 255, 255)
+RED   = (213, 50, 80)
+GREEN = (0, 255, 0)
+BLUE  = (50, 153, 213)
+GRAY  = (169, 169, 169)
+PURP  = (160, 32, 240)
+GOLD  = (255, 215, 0)
 
-def draw_snake(s):
-   for (x,y) in s:
-       pygame.draw.rect(screen, GREEN, (x, y, CELL, CELL))
+font_main  = pygame.font.SysFont("bahnschrift", 26)
+font_score = pygame.font.SysFont("comicsansms", 20)
 
-def send_score(name, score):
-   # Uses the helpers exposed by index.html
-   db = _snake_db
-   ref = firebase_firestore.doc(db, "scores", str(time.time()))
-   firebase_firestore.setDoc(ref, {
-       "game": "snake",
-       "name": name,
-       "score": int(score),
-       "created_at": firebase_firestore.serverTimestamp()
-   })
+win = pygame.display.set_mode((WIDTH, HEIGHT))
+pygame.display.set_caption("Snake — Pygame (offline)")
+clock = pygame.time.Clock()
 
-def set_speed_text(mult):
-   js._snake_set_speed_text(f"Speed ×{mult:.1f}")
+def draw_text_center(msg, color, y):
+   surf = font_main.render(msg, True, color)
+   rect = surf.get_rect(center=(WIDTH//2, y))
+   win.blit(surf, rect)
 
-def show_speed_popup(mult, show=True):
-   js._snake_show_speed_popup(f"×{mult:.1f}", show)
+def hud(score, remain, mult):
+   s = font_score.render(f"Score: {score}", True, WHITE)
+   t = font_score.render(f"Time: {remain}", True, WHITE)
+   m = font_score.render(f"Speed ×{mult:.1f}", True, WHITE)
+   win.blit(s, (10, 10))
+   win.blit(t, (WIDTH-120, 10))
+   win.blit(m, (WIDTH//2 - 50, 10))
 
-def new_food():
-   return (
-       round(random.randrange(0, DIS_W - CELL) / CELL) * CELL,
-       round(random.randrange(0, DIS_H - CELL) / CELL) * CELL
-   )
+def rand_cell():
+   return [
+       random.randrange(0, WIDTH // CELL) * CELL,
+       random.randrange(0, HEIGHT // CELL) * CELL
+   ]
 
-def game():
-   # initial state
-   x = DIS_W//2; y = DIS_H//2
-   dx = 0; dy = 0
-   snake = [(x,y)]
-   length = 1
-   score  = 0
-   food = new_food()
+def game_over_screen(score):
+   while True:
+       for e in pygame.event.get():
+           if e.type == pygame.QUIT:
+               return "quit"
+           if e.type == pygame.KEYDOWN:
+               if e.key == pygame.K_q:
+                   return "quit"
+               if e.key == pygame.K_c or e.key == pygame.K_r:
+                   return "restart"
+       win.fill(BLACK)
+       draw_text_center(f"Game Over! Score: {score}", RED, HEIGHT//3)
+       draw_text_center("Press C/R to Restart or Q to Quit", WHITE, HEIGHT//3 + 40)
+       pygame.display.flip()
+       clock.tick(15)
 
-   # name prompt
-   try:
-       player_name = js.prompt("Enter your name:", "Player") or "Player"
-   except Exception:
-       player_name = "Player"
+def play_one_round():
+   x = (WIDTH // (2*CELL)) * CELL
+   y = (HEIGHT // (2*CELL)) * CELL
+   dx, dy = 0, 0
+   cur_dir = (0, 0)
+   next_dir = (0, 0)
 
-   # speed system
-   mult = 1
-   last_mult = 1
-   popup_until = 0.0
-   set_speed_text(mult)
+   snake = [[x, y]]
+   snake_len = 1
+   score = 0
+   peak_score = 0            # highest score reached (for non-decreasing speed)
+
+   food = rand_cell()
+
+   poison = [rand_cell() for _ in range(4)]
+   poison_cycle_start = time.time()
+   POISON_VISIBLE_SECS = 3.0
+   POISON_HIDDEN_SECS = 1.0
+
+   golden = None
+   golden_spawn_time = None
+   GOLDEN_LIFE = 5.0
+
+   obstacles = []
+
+   round_start = None
+   HARD_LIMIT = 60
 
    running = True
    while running:
+       # input
        for e in pygame.event.get():
            if e.type == pygame.QUIT:
-               return
+               return "quit"
            if e.type == pygame.KEYDOWN:
-               if e.key == pygame.K_LEFT:  dx, dy = -CELL, 0
-               elif e.key == pygame.K_RIGHT: dx, dy = CELL, 0
-               elif e.key == pygame.K_UP:   dx, dy = 0, -CELL
-               elif e.key == pygame.K_DOWN: dx, dy = 0, CELL
+               if round_start is None and e.key in (pygame.K_LEFT, pygame.K_RIGHT, pygame.K_UP, pygame.K_DOWN,
+                                                    pygame.K_a, pygame.K_d, pygame.K_w, pygame.K_s):
+                   round_start = time.time()
+               if e.key in (pygame.K_LEFT, pygame.K_a):
+                   next_dir = (-CELL, 0)
+               elif e.key in (pygame.K_RIGHT, pygame.K_d):
+                   next_dir = (CELL, 0)
+               elif e.key in (pygame.K_UP, pygame.K_w):
+                   next_dir = (0, -CELL)
+               elif e.key in (pygame.K_DOWN, pygame.K_s):
+                   next_dir = (0, CELL)
+
+       # prevent 180° reverse
+       if (next_dir[0] != -cur_dir[0] or next_dir[1] != -cur_dir[1]) or cur_dir == (0, 0):
+           dx, dy = next_dir
+           cur_dir = next_dir
+
+       # time / end by timeout
+       elapsed = 0 if round_start is None else time.time() - round_start
+       if elapsed >= HARD_LIMIT:
+           out = game_over_screen(score)
+           return out
+
+       # poison visibility
+       t = time.time() - poison_cycle_start
+       cycle = POISON_VISIBLE_SECS + POISON_HIDDEN_SECS
+       phase = t % cycle
+       poison_visible = (phase <= POISON_VISIBLE_SECS)
+       if not poison_visible and phase < 0.05:
+           poison = [rand_cell() for _ in range(4)]
+
+       # maybe golden
+       if golden is None and random.randint(1,100) <= 3:
+           golden = rand_cell()
+           golden_spawn_time = time.time()
+       if golden and (time.time() - golden_spawn_time) > GOLDEN_LIFE:
+           golden = None
 
        # move
        x += dx; y += dy
+       if x < 0 or x >= WIDTH or y < 0 or y >= HEIGHT:
+           out = game_over_screen(score)
+           return out
+       head = [x, y]
+       snake.append(head)
+       while len(snake) > snake_len:
+           snake.pop(0)
 
-       # bounds -> game over
-       if x < 0 or x >= DIS_W or y < 0 or y >= DIS_H:
-           send_score(player_name, score); break
+       # collisions
+       if head in snake[:-1]:
+           out = game_over_screen(score)
+           return out
 
-       # self-collide -> game over
-       if (x,y) in snake[:-1]:
-           send_score(player_name, score); break
-
-       snake.append((x,y))
-       if len(snake) > length: snake.pop(0)
-
-       # eat
-       if x == food[0] and y == food[1]:
-           food = new_food()
-           length += 1
-           score += 1
-
-       # speed scaling (every 5 points)
-       mult = 1 + (score // 5)
-       sleep_time = BASE_SLEEP / mult
-       if sleep_time < MIN_SLEEP: sleep_time = MIN_SLEEP
-
-       # popup when multiplier increases
-       now = time.time()
-       if mult != last_mult:
-           last_mult = mult
-           set_speed_text(mult)
-           show_speed_popup(mult, True)
-           popup_until = now + 2.0  # show for 2 seconds
-
-       if popup_until and now > popup_until:
-           show_speed_popup(mult, False)
-           popup_until = 0.0
+       for ox, oy in obstacles:
+           if x == ox and y == oy:
+               out = game_over_screen(score)
+               return out
 
        # draw
-       screen.fill(BLACK)
-       # food
-       pygame.draw.rect(screen, BLUE, (food[0], food[1], CELL, CELL))
-       # snake
-       draw_snake(snake)
+       win.fill(BLUE)
+       pygame.draw.rect(win, RED, (food[0], food[1], CELL, CELL))
+       if poison_visible:
+           for px, py in poison:
+               pygame.draw.rect(win, PURP, (px, py, CELL, CELL))
+       if golden:
+           pygame.draw.rect(win, GOLD, (golden[0], golden[1], CELL, CELL))
+       for ox, oy in obstacles:
+           pygame.draw.rect(win, GRAY, (ox, oy, CELL, CELL))
+       for sx, sy in snake:
+           pygame.draw.rect(win, GREEN, (sx, sy, CELL, CELL))
 
-       # (optional) draw score inside canvas too, if you want:
-       score_surf = font_small.render(f"Score {score}", True, YELLOW)
-       screen.blit(score_surf, (8, 6))
+       # speed multiplier (non-decreasing)
+       peak_score = max(peak_score, score)
+       speed_mult = 1 + (peak_score // 5)
+
+       # hud
+       remain = max(0, HARD_LIMIT - int(elapsed))
+       hud(score, remain, float(speed_mult))
 
        pygame.display.flip()
-       time.sleep(sleep_time)
 
-   # simple game-over splash
-   screen.fill(BLACK)
-   t = font_medium.render("Game Over", True, RED)
-   screen.blit(t, (DIS_W//2 - t.get_width()//2, DIS_H//2 - 12))
-   pygame.display.flip()
-   time.sleep(1.25)
+       # eats
+       if x == food[0] and y == food[1]:
+           food = rand_cell()
+           snake_len += 1
+           score += 1
+           # spawn obstacle safely (avoid snake + food)
+           forbidden = set((sx, sy) for sx, sy in snake)
+           forbidden.add((food[0], food[1]))
+           while True:
+               c = rand_cell()
+               if (c[0], c[1]) not in forbidden:
+                   obstacles.append(c)
+                   break
+
+       if poison_visible:
+           for i in range(len(poison) - 1, -1, -1):
+               if x == poison[i][0] and y == poison[i][1]:
+                   poison.pop(i)
+                   score = max(0, score - 2)
+
+       if golden and x == golden[0] and y == golden[1]:
+           score += 5
+           snake_len += 5
+           for _ in range(5):
+               forbidden = set((sx, sy) for sx, sy in snake)
+               forbidden.add((food[0], food[1]))
+               while True:
+                   c = rand_cell()
+                   if (c[0], c[1]) not in forbidden:
+                       obstacles.append(c)
+                       break
+           golden = None
+
+       # dynamic FPS: faster with higher multiplier
+       clock.tick(int(BASE_SPEED_HZ * speed_mult))
+
+def main():
+   while True:
+       out = play_one_round()
+       if out == "quit":
+           break
+   pygame.quit()
+   sys.exit()
 
 if __name__ == "__main__":
-   game()
+   main()
