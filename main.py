@@ -52,7 +52,7 @@ def game_over_screen(score):
            if e.type == pygame.KEYDOWN:
                if e.key == pygame.K_q:
                    return "quit"
-               if e.key == pygame.K_c or e.key == pygame.K_r:
+               if e.key in (pygame.K_c, pygame.K_r):
                    return "restart"
        win.fill(BLACK)
        draw_text_center(f"Game Over! Score: {score}", RED, HEIGHT//3)
@@ -61,6 +61,7 @@ def game_over_screen(score):
        clock.tick(15)
 
 def play_one_round():
+   # start position (centered on grid)
    x = (WIDTH // (2*CELL)) * CELL
    y = (HEIGHT // (2*CELL)) * CELL
    dx, dy = 0, 0
@@ -70,14 +71,19 @@ def play_one_round():
    snake = [[x, y]]
    snake_len = 1
    score = 0
-   peak_score = 0            # highest score reached (for non-decreasing speed)
+   peak_score = 0                 # highest score reached (for non-decreasing speed)
 
    food = rand_cell()
 
-   poison = [rand_cell() for _ in range(4)]
-   poison_cycle_start = time.time()
-   POISON_VISIBLE_SECS = 3.0
-   POISON_HIDDEN_SECS = 1.0
+   # -------------------- NEW POISON SCHEDULER --------------------
+   # 5 random moments within the 60s round (avoid first 3s & last 3s buffer)
+   # Each spawn shows poison for POISON_VISIBLE_DURATION seconds
+   poison = []                    # active poison cells (cleared when duration ends)
+   poison_spawn_times = sorted(random.uniform(3.0, 57.0) for _ in range(5))
+   next_poison_index = 0
+   poison_visible_until = 0.0
+   POISON_VISIBLE_DURATION = 3.0  # seconds poison stays visible
+   # ----------------------------------------------------------------
 
    golden = None
    golden_spawn_time = None
@@ -86,17 +92,19 @@ def play_one_round():
    obstacles = []
 
    round_start = None
-   HARD_LIMIT = 60
+   HARD_LIMIT = 60  # seconds
 
    running = True
    while running:
-       # input
+       # ----- input -----
        for e in pygame.event.get():
            if e.type == pygame.QUIT:
                return "quit"
            if e.type == pygame.KEYDOWN:
-               if round_start is None and e.key in (pygame.K_LEFT, pygame.K_RIGHT, pygame.K_UP, pygame.K_DOWN,
-                                                    pygame.K_a, pygame.K_d, pygame.K_w, pygame.K_s):
+               if round_start is None and e.key in (
+                   pygame.K_LEFT, pygame.K_RIGHT, pygame.K_UP, pygame.K_DOWN,
+                   pygame.K_a, pygame.K_d, pygame.K_w, pygame.K_s
+               ):
                    round_start = time.time()
                if e.key in (pygame.K_LEFT, pygame.K_a):
                    next_dir = (-CELL, 0)
@@ -112,29 +120,35 @@ def play_one_round():
            dx, dy = next_dir
            cur_dir = next_dir
 
-       # time / end by timeout
-       elapsed = 0 if round_start is None else time.time() - round_start
+       now = time.time()
+       elapsed = 0 if round_start is None else now - round_start
        if elapsed >= HARD_LIMIT:
            out = game_over_screen(score)
            return out
 
-       # poison visibility
-       t = time.time() - poison_cycle_start
-       cycle = POISON_VISIBLE_SECS + POISON_HIDDEN_SECS
-       phase = t % cycle
-       poison_visible = (phase <= POISON_VISIBLE_SECS)
-       if not poison_visible and phase < 0.05:
-           poison = [rand_cell() for _ in range(4)]
+       # ---- NEW: poison scheduling ----
+       # Trigger a new poison batch when we pass the next scheduled time
+       if round_start is not None and next_poison_index < len(poison_spawn_times):
+           if elapsed >= poison_spawn_times[next_poison_index]:
+               # Spawn 4 poison cells (you can change 4 to random.randint(3,6) if you want)
+               poison = [rand_cell() for _ in range(4)]
+               poison_visible_until = now + POISON_VISIBLE_DURATION
+               next_poison_index += 1
 
-       # maybe golden
-       if golden is None and random.randint(1,100) <= 3:
+       # Hide poison when its visibility window passes
+       if poison and now > poison_visible_until:
+           poison = []
+
+       # ---- maybe golden ----
+       if golden is None and random.randint(1, 100) <= 3:
            golden = rand_cell()
-           golden_spawn_time = time.time()
-       if golden and (time.time() - golden_spawn_time) > GOLDEN_LIFE:
+           golden_spawn_time = now
+       if golden and (now - golden_spawn_time) > GOLDEN_LIFE:
            golden = None
 
-       # move
-       x += dx; y += dy
+       # ---- move ----
+       x += dx
+       y += dy
        if x < 0 or x >= WIDTH or y < 0 or y >= HEIGHT:
            out = game_over_screen(score)
            return out
@@ -143,20 +157,19 @@ def play_one_round():
        while len(snake) > snake_len:
            snake.pop(0)
 
-       # collisions
+       # ---- collisions ----
        if head in snake[:-1]:
            out = game_over_screen(score)
            return out
-
        for ox, oy in obstacles:
            if x == ox and y == oy:
                out = game_over_screen(score)
                return out
 
-       # draw
+       # ---- draw ----
        win.fill(BLUE)
        pygame.draw.rect(win, RED, (food[0], food[1], CELL, CELL))
-       if poison_visible:
+       if poison:
            for px, py in poison:
                pygame.draw.rect(win, PURP, (px, py, CELL, CELL))
        if golden:
@@ -166,17 +179,16 @@ def play_one_round():
        for sx, sy in snake:
            pygame.draw.rect(win, GREEN, (sx, sy, CELL, CELL))
 
-       # speed multiplier (non-decreasing)
+       # ---- speed multiplier (non-decreasing) ----
        peak_score = max(peak_score, score)
        speed_mult = 1 + (peak_score // 5)
 
-       # hud
+       # ---- HUD ----
        remain = max(0, HARD_LIMIT - int(elapsed))
        hud(score, remain, float(speed_mult))
-
        pygame.display.flip()
 
-       # eats
+       # ---- eats ----
        if x == food[0] and y == food[1]:
            food = rand_cell()
            snake_len += 1
@@ -190,7 +202,7 @@ def play_one_round():
                    obstacles.append(c)
                    break
 
-       if poison_visible:
+       if poison:
            for i in range(len(poison) - 1, -1, -1):
                if x == poison[i][0] and y == poison[i][1]:
                    poison.pop(i)
@@ -199,6 +211,7 @@ def play_one_round():
        if golden and x == golden[0] and y == golden[1]:
            score += 5
            snake_len += 5
+           # add 5 new obstacles safely
            for _ in range(5):
                forbidden = set((sx, sy) for sx, sy in snake)
                forbidden.add((food[0], food[1]))
@@ -209,7 +222,7 @@ def play_one_round():
                        break
            golden = None
 
-       # dynamic FPS: faster with higher multiplier
+       # ---- dynamic FPS: faster with higher multiplier ----
        clock.tick(int(BASE_SPEED_HZ * speed_mult))
 
 def main():
