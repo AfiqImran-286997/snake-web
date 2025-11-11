@@ -273,7 +273,7 @@ function showNamePrompt(next="home"){
      food=randCell();
      // NEW: poison schedule (5 random moments between 3s and 57s)
      poison=[];
-     poisonSpawnTimes = Array.from({length:5}, ()=> 3000 + Math.random()*54000).sort((a,b)=>a-b);
+     poisonSpawnTimes = Array.from({length:5}, ()=> 3000 + Math.random()*4000).sort((a,b)=>a-b);
      poisonIndex = 0;
      poisonVisibleUntil = 0;
      golden=null; goldenStart=null; obstacles=[];
