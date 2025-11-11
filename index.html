@@ -279,7 +279,9 @@ let t = 0;
 for (let i = 0; i < 5; i++) {
  t += 5000 + Math.random() * 2000; // +5 to +7 seconds
  if (t > 59000) break;
- poisonSpawnTimes.push(t);
+ // 5 random moments anywhere in the round (0–59s)
+poisonSpawnTimes = Array.from({length:5}, () => Math.random() * 59000)
+ .sort((a,b)=>a-b);
 }
      poisonIndex = 0;
      poisonVisibleUntil = 0;
