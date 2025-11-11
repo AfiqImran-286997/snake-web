@@ -222,6 +222,17 @@ let db=null;
    let COLS = canvas.width / CELL;
    let ROWS = canvas.height / CELL;
 
+   // ====== NEW: Background image setup ======
+   // Put your image in the repo (e.g., /assets/lss_bg.png)
+   const BG_PATH = "lss_bg.png";
+   const bgImg = new Image();
+   bgImg.src = BG_PATH;
+   let bgReady = false;
+   bgImg.onload = () => { bgReady = true; };
+   // How dark to make the image (0 = no darkening, 1 = fully dark)
+   const BG_DIM_ALPHA = 0.35;
+   // =========================================
+
    const COL = { bg:"#327aa8", snake:"#00ff00", food:"#d53250", poison:"#a020f0", gold:"#ffd700", ob:"#a9a9a9" };
 
    const BASE_HZ = 15;
@@ -300,9 +311,39 @@ let db=null;
    window.addEventListener('resize', resizeCanvas);
 
    function drawCell(c,color){ ctx.fillStyle=color; ctx.fillRect(c.x,c.y,CELL,CELL); }
+
+   // ====== NEW: draw background image (cover + dim) ======
+   function drawBackground(){
+     if(!bgReady){
+       // fallback solid color if image not ready
+       ctx.fillStyle = COL.bg;
+       ctx.fillRect(0,0,canvas.width,canvas.height);
+       return;
+     }
+     const cw = canvas.width, ch = canvas.height;
+     const iw = bgImg.naturalWidth || bgImg.width;
+     const ih = bgImg.naturalHeight || bgImg.height;
+
+     // scale to "cover" canvas while keeping aspect ratio
+     const scale = Math.max(cw/iw, ch/ih);
+     const dw = iw * scale;
+     const dh = ih * scale;
+     const dx = (cw - dw) / 2;
+     const dy = (ch - dh) / 2;
+
+     // draw image
+     ctx.imageSmoothingEnabled = true;
+     ctx.drawImage(bgImg, dx, dy, dw, dh);
+
+     // darken so food/poison/blocks are always visible
+     ctx.fillStyle = `rgba(0,0,0,${BG_DIM_ALPHA})`;
+     ctx.fillRect(0,0,cw,ch);
+   }
+// ======================================================
+
    function drawAll(){
-     ctx.fillStyle=COL.bg; ctx.fillRect(0,0,canvas.width,canvas.height);
-     if(!snake) return;
+     drawBackground();
+
      drawCell(food, COL.food);
 
      if (poison && poison.length){ poison.forEach(p=>drawCell(p, COL.poison)); }
@@ -314,7 +355,8 @@ let db=null;
      obstacles.forEach(o=>drawCell(o, COL.ob));
      snake.forEach(s=>drawCell(s, COL.snake));
    }
-function tick(){
+
+   function tick(){
      if(!roundStart && (nextDir.x||nextDir.y)) roundStart=performance.now();
 
      if(snake.length<2 ||
@@ -389,7 +431,6 @@ function tick(){
      const dt=ts-lastTick; lastTick=ts; acc+=dt;
 
      const stepMs = 1000 / (BASE_HZ * speedMult);
-
      while(acc >= stepMs){
        tick(); acc -= stepMs;
        if(!running) return;
@@ -452,4 +493,4 @@ function tick(){
  </script>
 </body>
 </html>
-11:02 AM
+
