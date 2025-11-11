@@ -275,10 +275,10 @@ function showNamePrompt(next="home"){
      poison=[];
      // NEW: poison schedule (5 batches spaced ~5–7s apart between 3–56s)
 poisonSpawnTimes = [];
-let t = 3000; // 3s start
+let t = 0; 
 for (let i = 0; i < 5; i++) {
  t += 5000 + Math.random() * 2000; // +5 to +7 seconds
- if (t > 56000) break;
+ if (t > 59000) break;
  poisonSpawnTimes.push(t);
 }
      poisonIndex = 0;
