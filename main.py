@@ -80,7 +80,8 @@ def play_one_round():
    # Each spawn shows poison for POISON_VISIBLE_DURATION seconds
 # --- Poison spawn system (5 batches spaced ~5–7s apart between 3–56s) ---
 poison = []                    
-poison_spawn_times = []
+# 5 random moments anywhere in the round (0–59s)
+poison_spawn_times = sorted(random.uniform(0.0, 59.0) for _ in range(5))
 t = 0.0
 for _ in range(5):
    t += random.uniform(5.0, 7.0)
