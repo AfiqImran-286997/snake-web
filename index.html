@@ -5,6 +5,7 @@
  <meta name="viewport"
        content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
  <title>Snake — Mobile Web + Firebase (Home + Name + D-pad)</title>
+
  <style>
    :root{
      --bg:#163f5b; --board:#327aa8; --snake:#00ff00; --food:#d53250;
@@ -20,7 +21,7 @@
    .wrap{
      height:100dvh;
      display:grid;
-     grid-template-rows:auto 1fr auto; /* header, game, controls */
+     grid-template-rows:auto 1fr auto;
      justify-items:center; gap:6px;
    }
    header{
@@ -38,7 +39,6 @@
    main{ width:100%; display:grid; place-items:center; position:relative; }
    #board{ image-rendering:pixelated; border-radius:8px; box-shadow:0 8px 24px rgba(0,0,0,0.35); }
 
-   /* D-pad area */
    .pad{
      width:100%; max-width:900px;
      padding: 6px 10px calc(6px + var(--safe-bottom));
@@ -63,7 +63,6 @@
    #btnRight{ grid-column:3; grid-row:2; }
    #btnDown { grid-column:2; grid-row:3; }
 
-   /* Overlay (Home, Name, Game Over) */
    #overlay{
      position:fixed; inset:0; z-index:10; display:none; align-items:center; justify-content:center;
      background:rgba(0,0,0,0.6); padding:16px;
@@ -90,7 +89,7 @@
    }
    a.ghostBtn{ text-decoration:none; display:inline-block; }
 
-   /* Speed toast (non-intrusive, top-center over the canvas) */
+   /* Speed toast */
    #speedToast{
      position:absolute; top:6px; left:0; right:0; display:grid; place-items:center;
      pointer-events:none; opacity:0; transition:opacity .15s ease;
@@ -103,13 +102,13 @@
    }
  </style>
 </head>
+
 <body>
  <div class="wrap">
    <header>
      <div id="hud">
        <span id="score">Score: 0</span>
        <span id="time">Time: 60</span>
-       <!-- NEW: speed indicator (keeps UI style) -->
        <span id="speed">Speed: ×1.0</span>
        <span id="playerTag"></span><span id="changeName" hidden>change</span>
      </div>
@@ -118,11 +117,9 @@
 
    <main>
      <canvas id="board" width="300" height="400"></canvas>
-     <!-- NEW: speed-up toast -->
      <div id="speedToast"><div class="bubble">Speed Up! ×1.0</div></div>
    </main>
 
-   <!-- D-pad -->
    <div class="pad" aria-label="On-screen controller">
      <div class="dpad">
        <button id="btnUp" class="btn"    aria-label="Up">▲</button>
@@ -133,15 +130,14 @@
    </div>
  </div>
 
- <!-- Overlay -->
  <div id="overlay"><div class="card" id="overlayCard"></div></div>
 
- <!-- Firebase + Game (unchanged foundation) -->
+ <!-- Firebase + Game -->
  <script type="module">
    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-app.js";
    import { getFirestore, collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-firestore.js";
 
-   /* ===== YOUR FIREBASE CONFIG (same) ===== */
+   /* Firebase config (same as before) */
    const firebaseConfig = {
      apiKey: "AIzaSyCB1IQNSy8pGFXgv9S1P4f0sTLyPxiUv9k",
      authDomain: "snake-web-b6745.firebaseapp.com",
@@ -173,8 +169,7 @@
      if(n){ t.textContent = "Player: " + n; c.hidden = false; }
      else { t.textContent = "Player: (not set)"; c.hidden = true; }
    }
-
-   function showNamePrompt(next="home"){
+function showNamePrompt(next="home"){
      openOverlay(`
        <h1>Welcome!</h1>
        <p>Please enter your player name.</p>
@@ -190,7 +185,8 @@
      };
      document.getElementById('nameInput').focus();
    }
-function showHome(){
+
+   function showHome(){
      const n = getName();
      openOverlay(`
        <h1>Snake</h1>
@@ -215,7 +211,7 @@ function showHome(){
    const ctx = canvas.getContext('2d');
    const scoreEl = document.getElementById('score');
    const timeEl  = document.getElementById('time');
-   const speedEl = document.getElementById('speed'); // NEW
+   const speedEl = document.getElementById('speed');
 
    const btnUp = document.getElementById('btnUp');
    const btnDown = document.getElementById('btnDown');
@@ -229,17 +225,22 @@ function showHome(){
 
    const COL = { bg:"#327aa8", snake:"#00ff00", food:"#d53250", poison:"#a020f0", gold:"#ffd700", ob:"#a9a9a9" };
 
-   const BASE_HZ = 15;                  // base tick rate
+   const BASE_HZ = 15;
    const ROUND_LIMIT=60;
-   const POISON_VISIBLE_SECS=3.0, POISON_HIDDEN_SECS=1.0, GOLDEN_LIFE=5.0;
 
    let running=false, roundStart=null, lastTick=0, acc=0;
-   let snake, snakeLen, dir, nextDir, score, food, poison, poisonStart, golden, goldenStart, obstacles;
+   let snake, snakeLen, dir, nextDir, score, food, poison, golden, goldenStart, obstacles;
 
-   // NEW: speed milestone state (never decreases)
-   let peakScore = 0;           // highest score reached this round
-   let speedMult = 1;           // 1 + floor(peakScore/5)
+   // speed milestone state
+   let peakScore = 0;
+   let speedMult = 1;
    const speedToast = document.getElementById('speedToast');
+
+   // ---- NEW poison scheduler state ----
+   let poisonSpawnTimes = [];   // seconds within round when a batch should spawn
+   let poisonIndex = 0;         // next spawn to trigger
+   let poisonVisibleUntil = 0;  // absolute ms timestamp (performance.now()) when to hide
+   const POISON_VISIBLE_DURATION = 3000; // ms
 
    const same=(a,b)=>a.x===b.x&&a.y===b.y;
    const randCell=()=>({x:Math.floor(Math.random()*COLS)*CELL, y:Math.floor(Math.random()*ROWS)*CELL});
@@ -256,12 +257,10 @@ function showHome(){
    function setSpeed(mult){
      speedMult = mult;
      speedEl.textContent = `Speed: ×${mult.toFixed(1)}`;
-     // toast for 2s
      speedToast.querySelector('.bubble').textContent = `Speed Up! ×${mult.toFixed(1)}`;
      speedToast.classList.add('show');
      setTimeout(()=>speedToast.classList.remove('show'), 2000);
    }
-
    function maybeUpdateSpeed(){
      const target = 1 + Math.floor(peakScore / 5);
      if (target > speedMult) setSpeed(target);
@@ -271,10 +270,15 @@ function showHome(){
      running=false; roundStart=null; lastTick=0; acc=0;
      const cx=Math.floor(COLS/2)*CELL, cy=Math.floor(ROWS/2)*CELL;
      snake=[{x:cx,y:cy}]; snakeLen=1; dir={x:0,y:0}; nextDir={x:0,y:0}; score=0;
-     food=randCell(); poison=[randCell(),randCell(),randCell(),randCell()]; poisonStart=performance.now();
+     food=randCell();
+     // NEW: poison schedule (5 random moments between 3s and 57s)
+     poison=[];
+     poisonSpawnTimes = Array.from({length:5}, ()=> 3000 + Math.random()*54000).sort((a,b)=>a-b);
+     poisonIndex = 0;
+     poisonVisibleUntil = 0;
      golden=null; goldenStart=null; obstacles=[];
      scoreEl.textContent="Score: 0"; timeEl.textContent="Time: 60";
-     peakScore = 0; setSpeed(1); // NEW
+     peakScore = 0; setSpeed(1);
      drawAll();
    }
 
@@ -298,12 +302,16 @@ function showHome(){
      ctx.fillStyle=COL.bg; ctx.fillRect(0,0,canvas.width,canvas.height);
      if(!snake) return;
      drawCell(food, COL.food);
-     const now=performance.now();
-     const t=(now-poisonStart)/1000, cycle=POISON_VISIBLE_SECS+POISON_HIDDEN_SECS, phase=t%cycle;
-     const showPoison=phase<=POISON_VISIBLE_SECS;
-     if(showPoison){ poison.forEach(p=>drawCell(p, COL.poison)); }
-     else if(phase<0.05){ poison=[randCell(),randCell(),randCell(),randCell()]; }
-     if(golden){ drawCell(golden, COL.gold); if((now-goldenStart)/1000>GOLDEN_LIFE) golden=null; }
+
+     // NEW: draw poison only if active
+     if (poison && poison.length){
+       poison.forEach(p=>drawCell(p, COL.poison));
+     }
+
+     if(golden){
+       drawCell(golden, COL.gold);
+       if((performance.now()-goldenStart)/1000>5.0) golden=null;
+     }
      obstacles.forEach(o=>drawCell(o, COL.ob));
      snake.forEach(s=>drawCell(s, COL.snake));
    }
@@ -325,30 +333,46 @@ function showHome(){
      for(let i=0;i<snake.length-1;i++){ if(same(snake[i],newHead)){ endRound(); return; } }
      for(const o of obstacles){ if(same(o,newHead)){ endRound(); return; } }
 
+     // maybe golden
      if(!golden && Math.random()<=0.03){ golden=randCell(); goldenStart=performance.now(); }
 
+     // eat food
      if(same(newHead,food)){
        food=randCell(); snakeLen+=1; score+=1; scoreEl.textContent="Score: "+score;
        obstacles.push(generateSafeObstacle());
-       if (score > peakScore){ peakScore = score; maybeUpdateSpeed(); } // NEW
+       if (score > peakScore){ peakScore = score; maybeUpdateSpeed(); }
+     }
+// NEW: poison scheduling (5 random spawns per round)
+     if (roundStart){
+       const elapsedMs = performance.now()-roundStart;
+       // trigger next spawn
+       if (poisonIndex < poisonSpawnTimes.length && elapsedMs >= poisonSpawnTimes[poisonIndex]){
+         poison = [randCell(), randCell(), randCell(), randCell()]; // 4 cells; tweak if you want
+         poisonVisibleUntil = performance.now() + POISON_VISIBLE_DURATION;
+         poisonIndex++;
+       }
+       // hide when time’s up
+       if (poison.length && performance.now() > poisonVisibleUntil){
+         poison = [];
+       }
      }
 
-     const now=performance.now();
-     const t=(now-poisonStart)/1000, cycle=POISON_VISIBLE_SECS+POISON_HIDDEN_SECS, phase=t%cycle;
-     const showPoison=phase<=POISON_VISIBLE_SECS;
-     if(showPoison){
+     // poison collision (only when active)
+     if (poison.length){
        for(let i=poison.length-1;i>=0;i--){
          if(same(poison[i],newHead)){ poison.splice(i,1); score=Math.max(0,score-2); scoreEl.textContent="Score: "+score; }
        }
      }
 
+     // golden collision
      if(golden && same(golden,newHead)){
        score+=5; snakeLen+=5; scoreEl.textContent="Score: "+score;
        for(let i=0;i<5;i++) obstacles.push(generateSafeObstacle());
        golden=null;
-       if (score > peakScore){ peakScore = score; maybeUpdateSpeed(); } // NEW
+       if (score > peakScore){ peakScore = score; maybeUpdateSpeed(); }
      }
 
+     // timer
      if(roundStart){
        const elapsed=(performance.now()-roundStart)/1000;
        const remain=Math.max(0, 60 - Math.floor(elapsed));
@@ -364,7 +388,6 @@ function showHome(){
      if(!lastTick) lastTick=ts;
      const dt=ts-lastTick; lastTick=ts; acc+=dt;
 
-     // NEW: dynamic step based on speed multiplier (BASE_HZ * speedMult)
      const stepMs = 1000 / (BASE_HZ * speedMult);
 
      while(acc >= stepMs){
@@ -421,11 +444,11 @@ function showHome(){
    function startGame(){ closeOverlay(); running=true; lastTick=0; acc=0; requestAnimationFrame(loop); }
    document.getElementById('restartBtn').addEventListener('click', ()=>{ reset(); startGame(); });
 
-   /* ---- INIT ORDER (same) ---- */
-   showPlayerTag();          // 1) HUD name
-   reset();                  // 2) create game state BEFORE any drawing
-   resizeCanvas();           // 3) fit to device (will redraw safely)
-   if(getName()){ showHome(); } else { showNamePrompt("home"); } // 4) show Name or Menu first
+   /* ---- INIT ORDER ---- */
+   showPlayerTag();
+   reset();
+   resizeCanvas();
+   if(getName()){ showHome(); } else { showNamePrompt("home"); }
  </script>
 </body>
 </html>
