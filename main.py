@@ -81,10 +81,10 @@ def play_one_round():
 # --- Poison spawn system (5 batches spaced ~5–7s apart between 3–56s) ---
 poison = []                    
 poison_spawn_times = []
-t = 3.0
+t = 0.0
 for _ in range(5):
    t += random.uniform(5.0, 7.0)
-   if t > 56.0:
+   if t > 59.0:
        break
    poison_spawn_times.append(t)
 poison_spawn_times = sorted(poison_spawn_times)
