@@ -137,7 +137,7 @@
    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-app.js";
    import { getFirestore, collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-firestore.js";
 
-   /* Firebase config (same as before) */
+   /* Firebase config */
    const firebaseConfig = {
      apiKey: "AIzaSyCB1IQNSy8pGFXgv9S1P4f0sTLyPxiUv9k",
      authDomain: "snake-web-b6745.firebaseapp.com",
@@ -146,8 +146,7 @@
      messagingSenderId: "242732126109",
      appId: "1:242732126109:web:1d44c9bf8371f238792974"
    };
-
-   let db=null;
+let db=null;
    try{ const app = initializeApp(firebaseConfig); db = getFirestore(app); }
    catch(e){ console.warn("Firebase not configured; scores won't be saved.", e); }
 
@@ -169,7 +168,7 @@
      if(n){ t.textContent = "Player: " + n; c.hidden = false; }
      else { t.textContent = "Player: (not set)"; c.hidden = true; }
    }
-function showNamePrompt(next="home"){
+   function showNamePrompt(next="home"){
      openOverlay(`
        <h1>Welcome!</h1>
        <p>Please enter your player name.</p>
@@ -236,10 +235,10 @@ function showNamePrompt(next="home"){
    let speedMult = 1;
    const speedToast = document.getElementById('speedToast');
 
-   // ---- NEW poison scheduler state ----
-   let poisonSpawnTimes = [];   // seconds within round when a batch should spawn
+   // ---- Poison scheduler state ----
+   let poisonSpawnTimes = [];   // ms offsets when a batch should spawn
    let poisonIndex = 0;         // next spawn to trigger
-   let poisonVisibleUntil = 0;  // absolute ms timestamp (performance.now()) when to hide
+   let poisonVisibleUntil = 0;  // ms timestamp (performance.now()) when to hide
    const POISON_VISIBLE_DURATION = 3000; // ms
 
    const same=(a,b)=>a.x===b.x&&a.y===b.y;
@@ -271,20 +270,14 @@ function showNamePrompt(next="home"){
      const cx=Math.floor(COLS/2)*CELL, cy=Math.floor(ROWS/2)*CELL;
      snake=[{x:cx,y:cy}]; snakeLen=1; dir={x:0,y:0}; nextDir={x:0,y:0}; score=0;
      food=randCell();
-     // NEW: poison schedule (5 random moments between 3s and 57s)
-     poison=[];
-     // NEW: poison schedule (5 batches spaced ~5–7s apart between 3–56s)
-poisonSpawnTimes = [];
-let t = 0; 
-for (let i = 0; i < 5; i++) {
- t += 5000 + Math.random() * 2000; // +5 to +7 seconds
- if (t > 59000) break;
- // 5 random moments anywhere in the round (0–59s)
-poisonSpawnTimes = Array.from({length:5}, () => Math.random() * 59000)
- .sort((a,b)=>a-b);
-}
+
+     // poison schedule: 5 random moments anywhere in the round (0–59s)
+     poison = [];
+     poisonSpawnTimes = Array.from({ length: 5 }, () => Math.random() * 59000)
+       .sort((a, b) => a - b);
      poisonIndex = 0;
      poisonVisibleUntil = 0;
+
      golden=null; goldenStart=null; obstacles=[];
      scoreEl.textContent="Score: 0"; timeEl.textContent="Time: 60";
      peakScore = 0; setSpeed(1);
@@ -312,10 +305,7 @@ poisonSpawnTimes = Array.from({length:5}, () => Math.random() * 59000)
      if(!snake) return;
      drawCell(food, COL.food);
 
-     // NEW: draw poison only if active
-     if (poison && poison.length){
-       poison.forEach(p=>drawCell(p, COL.poison));
-     }
+     if (poison && poison.length){ poison.forEach(p=>drawCell(p, COL.poison)); }
 
      if(golden){
        drawCell(golden, COL.gold);
@@ -324,8 +314,7 @@ poisonSpawnTimes = Array.from({length:5}, () => Math.random() * 59000)
      obstacles.forEach(o=>drawCell(o, COL.ob));
      snake.forEach(s=>drawCell(s, COL.snake));
    }
-
-   function tick(){
+function tick(){
      if(!roundStart && (nextDir.x||nextDir.y)) roundStart=performance.now();
 
      if(snake.length<2 ||
@@ -351,9 +340,11 @@ poisonSpawnTimes = Array.from({length:5}, () => Math.random() * 59000)
        obstacles.push(generateSafeObstacle());
        if (score > peakScore){ peakScore = score; maybeUpdateSpeed(); }
      }
-// NEW: poison scheduling (5 random spawns per round)
+
+     // poison scheduling (5 random spawns per round)
      if (roundStart){
        const elapsedMs = performance.now()-roundStart;
+
        // trigger next spawn
        if (poisonIndex < poisonSpawnTimes.length && elapsedMs >= poisonSpawnTimes[poisonIndex]){
          poison = [randCell(), randCell(), randCell(), randCell()]; // 4 cells; tweak if you want
@@ -366,7 +357,7 @@ poisonSpawnTimes = Array.from({length:5}, () => Math.random() * 59000)
        }
      }
 
-     // poison collision (only when active)
+     // poison collision
      if (poison.length){
        for(let i=poison.length-1;i>=0;i--){
          if(same(poison[i],newHead)){ poison.splice(i,1); score=Math.max(0,score-2); scoreEl.textContent="Score: "+score; }
@@ -384,9 +375,9 @@ poisonSpawnTimes = Array.from({length:5}, () => Math.random() * 59000)
      // timer
      if(roundStart){
        const elapsed=(performance.now()-roundStart)/1000;
-       const remain=Math.max(0, 60 - Math.floor(elapsed));
+       const remain=Math.max(0, ROUND_LIMIT - Math.floor(elapsed));
        timeEl.textContent="Time: "+remain;
-       if(elapsed>=60){ endRound(); return; }
+       if(elapsed>=ROUND_LIMIT){ endRound(); return; }
      }
 
      drawAll();
@@ -461,3 +452,4 @@ poisonSpawnTimes = Array.from({length:5}, () => Math.random() * 59000)
  </script>
 </body>
 </html>
+11:02 AM
