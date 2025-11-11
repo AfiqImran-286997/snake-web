@@ -25,10 +25,12 @@ win = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption("Snake — Pygame (offline)")
 clock = pygame.time.Clock()
 
+
 def draw_text_center(msg, color, y):
    surf = font_main.render(msg, True, color)
    rect = surf.get_rect(center=(WIDTH//2, y))
    win.blit(surf, rect)
+
 
 def hud(score, remain, mult):
    s = font_score.render(f"Score: {score}", True, WHITE)
@@ -38,11 +40,13 @@ def hud(score, remain, mult):
    win.blit(t, (WIDTH-120, 10))
    win.blit(m, (WIDTH//2 - 50, 10))
 
+
 def rand_cell():
    return [
        random.randrange(0, WIDTH // CELL) * CELL,
        random.randrange(0, HEIGHT // CELL) * CELL
    ]
+
 
 def game_over_screen(score):
    while True:
@@ -60,6 +64,7 @@ def game_over_screen(score):
        pygame.display.flip()
        clock.tick(15)
 
+
 def play_one_round():
    # start position (centered on grid)
    x = (WIDTH // (2*CELL)) * CELL
@@ -71,29 +76,17 @@ def play_one_round():
    snake = [[x, y]]
    snake_len = 1
    score = 0
-   peak_score = 0                 # highest score reached (for non-decreasing speed)
+   peak_score = 0  # highest score reached (for non-decreasing speed)
 
    food = rand_cell()
 
-   # -------------------- NEW POISON SCHEDULER --------------------
-   # 5 random moments within the 60s round (avoid first 3s & last 3s buffer)
-   # Each spawn shows poison for POISON_VISIBLE_DURATION seconds
-# --- Poison spawn system (5 batches spaced ~5–7s apart between 3–56s) ---
-poison = []                    
-# 5 random moments anywhere in the round (0–59s)
-poison_spawn_times = sorted(random.uniform(0.0, 59.0) for _ in range(5))
-t = 0.0
-for _ in range(5):
-   t += random.uniform(5.0, 7.0)
-   if t > 59.0:
-       break
-   poison_spawn_times.append(t)
-poison_spawn_times = sorted(poison_spawn_times)
-
-next_poison_index = 0           
-poison_visible_until = 0        
-POISON_VISIBLE_DURATION = 3.0
-   # ----------------------------------------------------------------
+   # --- Poison spawn system: 5 random times anywhere in the 60s round ---
+   poison = []
+   poison_spawn_times = sorted(random.uniform(0.0, 59.0) for _ in range(5))
+   next_poison_index = 0
+   poison_visible_until = 0
+   POISON_VISIBLE_DURATION = 3.0
+   # ---------------------------------------------------------------------
 
    golden = None
    golden_spawn_time = None
@@ -136,20 +129,19 @@ POISON_VISIBLE_DURATION = 3.0
            out = game_over_screen(score)
            return out
 
-       # ---- NEW: poison scheduling ----
-       # Trigger a new poison batch when we pass the next scheduled time
+       # ---- Poison scheduling ----
        if round_start is not None and next_poison_index < len(poison_spawn_times):
            if elapsed >= poison_spawn_times[next_poison_index]:
-               # Spawn 4 poison cells (you can change 4 to random.randint(3,6) if you want)
+               # Spawn 4 poison cells (change 4 to random.randint(3,6) for more randomness)
                poison = [rand_cell() for _ in range(4)]
                poison_visible_until = now + POISON_VISIBLE_DURATION
                next_poison_index += 1
 
-       # Hide poison when its visibility window passes
+       # Hide poison after visibility duration
        if poison and now > poison_visible_until:
            poison = []
 
-       # ---- maybe golden ----
+       # ---- Golden food ----
        if golden is None and random.randint(1, 100) <= 3:
            golden = rand_cell()
            golden_spawn_time = now
@@ -189,7 +181,7 @@ POISON_VISIBLE_DURATION = 3.0
        for sx, sy in snake:
            pygame.draw.rect(win, GREEN, (sx, sy, CELL, CELL))
 
-       # ---- speed multiplier (non-decreasing) ----
+       # ---- speed multiplier ----
        peak_score = max(peak_score, score)
        speed_mult = 1 + (peak_score // 5)
 
@@ -203,7 +195,6 @@ POISON_VISIBLE_DURATION = 3.0
            food = rand_cell()
            snake_len += 1
            score += 1
-           # spawn obstacle safely (avoid snake + food)
            forbidden = set((sx, sy) for sx, sy in snake)
            forbidden.add((food[0], food[1]))
            while True:
@@ -221,7 +212,6 @@ POISON_VISIBLE_DURATION = 3.0
        if golden and x == golden[0] and y == golden[1]:
            score += 5
            snake_len += 5
-           # add 5 new obstacles safely
            for _ in range(5):
                forbidden = set((sx, sy) for sx, sy in snake)
                forbidden.add((food[0], food[1]))
@@ -232,8 +222,9 @@ POISON_VISIBLE_DURATION = 3.0
                        break
            golden = None
 
-       # ---- dynamic FPS: faster with higher multiplier ----
+       # ---- dynamic FPS ----
        clock.tick(int(BASE_SPEED_HZ * speed_mult))
+
 
 def main():
    while True:
@@ -242,6 +233,7 @@ def main():
            break
    pygame.quit()
    sys.exit()
+
 
 if __name__ == "__main__":
    main()
