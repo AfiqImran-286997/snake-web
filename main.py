@@ -79,7 +79,7 @@ def play_one_round():
    # 5 random moments within the 60s round (avoid first 3s & last 3s buffer)
    # Each spawn shows poison for POISON_VISIBLE_DURATION seconds
    poison = []                    # active poison cells (cleared when duration ends)
-   poison_spawn_times = sorted(random.uniform(3.0, 7.0) for _ in range(5))
+   poison_spawn_times = sorted(random.uniform(3.0, 57.0) for _ in range(5))
    next_poison_index = 0
    poison_visible_until = 0.0
    POISON_VISIBLE_DURATION = 3.0  # seconds poison stays visible
